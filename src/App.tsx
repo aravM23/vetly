@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router-dom'
 import AuthPage from '@/pages/Auth'
 import DashboardPage from '@/pages/Dashboard'
+import SettingsPage from '@/pages/Settings'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 
 export default function App() {
@@ -12,6 +13,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute>
+            <SettingsPage />
           </ProtectedRoute>
         }
       />

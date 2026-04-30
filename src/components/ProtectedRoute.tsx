@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
+import { AppHeader } from '@/components/AppHeader'
 import { useAuth } from '@/lib/auth'
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -9,7 +10,7 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 
   if (loading) {
     return (
-      <main className="min-h-screen grid place-items-center">
+      <main className="grid min-h-screen place-items-center">
         <Loader2 className="size-5 animate-spin text-paper-mute" />
       </main>
     )
@@ -19,5 +20,10 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
     return <Navigate to="/auth" replace state={{ from: location.pathname }} />
   }
 
-  return <>{children}</>
+  return (
+    <div className="min-h-screen">
+      <AppHeader />
+      {children}
+    </div>
+  )
 }
