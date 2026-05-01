@@ -296,20 +296,34 @@ function normalizeRow(raw: RawRow): NormalizedRow {
     'creator_name'
   )
 
-  // Resolve handle in priority order. scanned wins because it's a real handle
-  // observed in the row; column / URL / slug are progressively weaker.
+  // Resolve handle in priority order:
+  //   1. Explicit handle / username / account / IG / etc column. Wins when
+  //      present because it's the producer telling us "this is the handle";
+  //      we shouldn't second-guess with a heuristic. Validate that the result
+  //      looks like a real handle so a mis-mapped Name column doesn't sneak
+  //      through as "pat flynn".
+  //   2. Cell-wide scan (URLs, @-prefix anywhere, handle-named col with
+  //      handle-shape value). Catches CSVs without an obvious handle column.
+  //   3. profile_url column extraction.
+  //   4. Slugify display_name as a last resort.
   let handle: string | null = null
   let platformFromHandle: string | null = null
 
-  if (scanned) {
+  if (handleColInput) {
+    const candidate = normalizeHandle(handleColInput)?.toLowerCase() ?? null
+    if (candidate && /^[a-z0-9_.]{1,30}$/.test(candidate)) {
+      handle = candidate
+    }
+  }
+  if (!handle && scanned) {
     handle = scanned.handle
     platformFromHandle = scanned.platform
-  } else if (handleColInput) {
-    handle = normalizeHandle(handleColInput)?.toLowerCase() ?? null
-  } else if (fromUrl.handle) {
+  }
+  if (!handle && fromUrl.handle) {
     handle = fromUrl.handle
     platformFromHandle = fromUrl.platform
-  } else if (displayName) {
+  }
+  if (!handle && displayName) {
     handle = slugifyName(displayName)
   }
 
