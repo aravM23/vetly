@@ -410,6 +410,9 @@ function creatorHtml(c: CreatorRow): string {
   const reasoning = c.ai_reasoning ? escapeHtml(c.ai_reasoning) : ''
   const url = safeUrl(c.profile_url)
 
+  // Each meta part is either a fixed-vocabulary string (platform), a numeric
+  // formatter output (followers, er), or pre-escaped user content (niche).
+  // Joining and emitting directly is safe; do NOT wrap in escapeHtml again.
   const metaParts = [platform, followers, er, niche].filter(Boolean)
   const metaLine = metaParts.join(' · ')
 
@@ -423,7 +426,7 @@ function creatorHtml(c: CreatorRow): string {
       <td valign="top">
         <p style="margin:0;color:#F5F1E8;font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;font-size:18px;font-weight:600;line-height:1.2;">@${handle}</p>
         ${display ? `<p style="margin:2px 0 0 0;color:#A8A39A;font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;">${display}</p>` : ''}
-        ${metaLine ? `<p style="margin:8px 0 0 0;color:#A8A39A;font-family:'JetBrains Mono','Courier New',monospace;font-size:11px;">${escapeHtml(metaLine)}</p>` : ''}
+        ${metaLine ? `<p style="margin:8px 0 0 0;color:#A8A39A;font-family:'JetBrains Mono','Courier New',monospace;font-size:11px;">${metaLine}</p>` : ''}
         ${reasoning ? `<p style="margin:14px 0 0 0;color:#F5F1E8;font-family:'Instrument Serif',Georgia,serif;font-style:italic;font-size:16px;line-height:1.5;">${reasoning}</p>` : ''}
         ${url ? `<p style="margin:12px 0 0 0;"><a href="${url}" style="color:#D4F04A;font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;font-weight:600;text-decoration:none;">Open profile &rarr;</a></p>` : ''}
       </td>

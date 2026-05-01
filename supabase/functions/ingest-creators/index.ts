@@ -256,7 +256,8 @@ function normalizeRow(raw: RawRow): NormalizedRow {
   // in the row is more reliable than guessing from a display name.
   const scanned = scanForHandle(raw)
 
-  // Pass 2: explicit handle / username / account / IG / instagram column.
+  // Pass 2: explicit handle column. Aliases are normalized to alphanumeric-
+  // only, so "IG Username" and "ig_username" both resolve to "igusername".
   const handleColInput = get(
     'handle',
     'username',
@@ -264,7 +265,16 @@ function normalizeRow(raw: RawRow): NormalizedRow {
     'account',
     'ig',
     'instagram',
-    'screen_name'
+    'screen_name',
+    'ig_username',
+    'ig_handle',
+    'instagram_username',
+    'instagram_handle',
+    'tiktok_username',
+    'tiktok_handle',
+    'creator_handle',
+    'profile_handle',
+    'profile_username'
   )
 
   // Pass 3: profile URL column (handle and platform extractable together).
@@ -360,24 +370,44 @@ function normalizeRow(raw: RawRow): NormalizedRow {
   }
 }
 
-// Scans every cell in the row for a real handle: prefer URL matches (more
-// specific), fall back to @-prefix tokens. Returns the first match, with
-// platform set to whatever the URL implies, or DEFAULT_PLATFORM for bare
-// @-handles since IG is the only target right now.
+// Scans every cell in the row for a real handle. Three passes, most
+// authoritative first:
+//   1. URLs anywhere (instagram.com/foo, tiktok.com/@bar) — gives both
+//      handle AND platform.
+//   2. @-prefixed values anywhere — strong signal even without column name.
+//   3. Bare-handle-shaped value in a column whose name suggests a handle
+//      (handle / username / account / ig / instagram / tiktok / user /
+//      profile, with word boundaries so "User Name" matches but "Bigger"
+//      doesn't).
+// Anything not caught by these three falls through to the explicit column
+// alias lookup, the profile_url extraction, or display-name slugification.
+const HANDLE_COL_PATTERN = /(^|[^a-z])(handle|username|account|ig|instagram|tiktok|user|profile)([^a-z]|$)/i
+const HANDLE_VALUE_PATTERN = /^@?[a-zA-Z0-9_.]{2,30}$/
+
 function scanForHandle(raw: RawRow): { handle: string; platform: string } | null {
+  // Pass 1: URLs.
   for (const v of Object.values(raw)) {
     const s = String(v ?? '').trim()
     if (!s) continue
     const ext = extractFromUrl(s)
     if (ext.handle && ext.platform) return { handle: ext.handle, platform: ext.platform }
   }
+  // Pass 2: @-prefixed values.
   for (const v of Object.values(raw)) {
     const s = String(v ?? '').trim()
     if (!s.startsWith('@')) continue
     const cleaned = s.slice(1).trim()
-    if (/^[a-z0-9_.]{1,30}$/i.test(cleaned)) {
+    if (/^[a-zA-Z0-9_.]{1,30}$/.test(cleaned)) {
       return { handle: cleaned.toLowerCase(), platform: DEFAULT_PLATFORM }
     }
+  }
+  // Pass 3: bare-handle-shaped value in a handle-named column.
+  for (const [k, v] of Object.entries(raw)) {
+    if (!HANDLE_COL_PATTERN.test(k)) continue
+    const s = String(v ?? '').trim()
+    if (!s) continue
+    if (!HANDLE_VALUE_PATTERN.test(s)) continue
+    return { handle: s.replace(/^@/, '').toLowerCase(), platform: DEFAULT_PLATFORM }
   }
   return null
 }
@@ -397,14 +427,17 @@ function slugifyName(name: string): string | null {
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 // Looks up the first key from the row that has a non-empty string value.
-// Case-insensitive and tolerant of trailing whitespace in column names.
+// Strips ALL non-alphanumerics on both sides before comparing so "IG
+// Username", "ig_username", "ig-username", and "IGUsername" all collapse
+// to the same key. Aliases passed in can use whatever readable form.
 function firstString(row: RawRow, keys: string[]): string | null {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
   const lookup = new Map<string, unknown>()
   for (const [k, v] of Object.entries(row)) {
-    lookup.set(k.trim().toLowerCase(), v)
+    lookup.set(norm(k), v)
   }
   for (const k of keys) {
-    const v = lookup.get(k.trim().toLowerCase())
+    const v = lookup.get(norm(k))
     if (v == null) continue
     const s = String(v).trim()
     if (s) return s
