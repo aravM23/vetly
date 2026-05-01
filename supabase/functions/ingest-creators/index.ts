@@ -122,28 +122,45 @@ Deno.serve(async (req) => {
   }
   const batchId = batch.id as string
 
-  // Normalize + dedupe within the batch. Errors are collected per-row so a
-  // single bad row never tanks the whole import.
+  // Normalize per row first; collect errors without bailing the whole batch.
   const errors: RowError[] = []
-  const seen = new Set<string>()
+  const candidates: NormalizedRow[] = []
+  for (let i = 0; i < rawRows.length; i++) {
+    try {
+      candidates.push(normalizeRow(rawRows[i]))
+    } catch (e) {
+      errors.push({ index: i, reason: e instanceof Error ? e.message : String(e), row: rawRows[i] })
+    }
+  }
+
+  // Resolve intra-batch (platform, handle) collisions. Two rows with the same
+  // key + same display_name are a true duplicate (drop). Different display_name
+  // is a slug collision: keep both by suffixing handle with -2, -3, ... so two
+  // distinct Creators that happen to slugify to the same handle don't smush.
+  // Cross-batch collisions (against rows already in the DB) are not detected
+  // here; the upsert will refresh the existing row, which is acceptable for
+  // an MVP with a single user.
   const normalized: NormalizedRow[] = []
+  const seenByKey = new Map<string, string>() // platform:handle -> display_name
   let dedupeCount = 0
 
-  for (let i = 0; i < rawRows.length; i++) {
-    const raw = rawRows[i]
-    let row: NormalizedRow
-    try {
-      row = normalizeRow(raw)
-    } catch (e) {
-      errors.push({ index: i, reason: e instanceof Error ? e.message : String(e), row: raw })
-      continue
+  for (const row of candidates) {
+    let key = `${row.platform}:${row.handle}`
+    const existingDisplay = seenByKey.get(key)
+
+    if (existingDisplay !== undefined) {
+      const sameDisplay = (existingDisplay ?? '') === (row.display_name ?? '')
+      if (sameDisplay) {
+        dedupeCount++
+        continue
+      }
+      let suffix = 2
+      while (seenByKey.has(`${row.platform}:${row.handle}-${suffix}`)) suffix++
+      row.handle = `${row.handle}-${suffix}`
+      key = `${row.platform}:${row.handle}`
     }
-    const key = `${row.platform}:${row.handle.toLowerCase()}`
-    if (seen.has(key)) {
-      dedupeCount++
-      continue
-    }
-    seen.add(key)
+
+    seenByKey.set(key, row.display_name ?? '')
     normalized.push(row)
   }
 
@@ -225,53 +242,112 @@ async function readRows(req: Request, contentType: string): Promise<RawRow[]> {
 
 // ─── per-row normalization ──────────────────────────────────────────────────
 
+// Vetly is currently single-target (Stanley → Instagram), so any row that
+// can't be resolved to a platform via column or URL falls through to this
+// default. If a future CSV adds TikTok Creators, add a 'platform' column to
+// the source and the explicit value will win.
+const DEFAULT_PLATFORM = 'instagram'
+
 function normalizeRow(raw: RawRow): NormalizedRow {
   const get = (...keys: string[]) => firstString(raw, keys)
-  const getNum = (...keys: string[]) => firstString(raw, keys)
 
-  // Try to extract handle and platform together from a profile URL.
+  // Pass 1: scan every cell for an instagram.com / tiktok.com URL or an
+  // @-prefixed handle. Authoritative if found, since a real handle anywhere
+  // in the row is more reliable than guessing from a display name.
+  const scanned = scanForHandle(raw)
+
+  // Pass 2: explicit handle / username / account / IG / instagram column.
+  const handleColInput = get(
+    'handle',
+    'username',
+    'user',
+    'account',
+    'ig',
+    'instagram',
+    'screen_name'
+  )
+
+  // Pass 3: profile URL column (handle and platform extractable together).
   const profileUrlInput =
     get('profile_url', 'profile url', 'url', 'link', 'profile', 'profile_link') ?? ''
-  const fromUrl = extractFromUrl(profileUrlInput)
+  const fromUrl = profileUrlInput
+    ? extractFromUrl(profileUrlInput)
+    : { platform: null as string | null, handle: null as string | null }
 
-  // Handle: prefer explicit handle/username, fall back to URL extraction.
-  const handleInput = get('handle', 'username', 'user', 'screen_name')
-  let handle = normalizeHandle(handleInput) ?? fromUrl.handle
+  // Pass 4: display name, used for slugified fallback handle and for
+  // display_name regardless of which pass produced the canonical handle.
+  const displayName = get(
+    'display_name',
+    'display name',
+    'full_name',
+    'full name',
+    'name',
+    'creator',
+    'creator_name'
+  )
+
+  // Resolve handle in priority order. scanned wins because it's a real handle
+  // observed in the row; column / URL / slug are progressively weaker.
+  let handle: string | null = null
+  let platformFromHandle: string | null = null
+
+  if (scanned) {
+    handle = scanned.handle
+    platformFromHandle = scanned.platform
+  } else if (handleColInput) {
+    handle = normalizeHandle(handleColInput)?.toLowerCase() ?? null
+  } else if (fromUrl.handle) {
+    handle = fromUrl.handle
+    platformFromHandle = fromUrl.platform
+  } else if (displayName) {
+    handle = slugifyName(displayName)
+  }
+
   if (!handle) {
-    throw new Error('Missing handle (handle, username, or profile URL required)')
+    throw new Error(
+      'Missing handle (need handle, username, profile URL, or display name)'
+    )
   }
-  handle = handle.toLowerCase()
 
-  // Platform: explicit column wins, then URL detection.
+  // Resolve platform: explicit column > detected from URL or @-handle > default.
   const platformInput = get('platform', 'network', 'channel', 'source_platform')
-  let platform = (platformInput ?? '').trim().toLowerCase() || fromUrl.platform || null
-  if (!platform) {
-    throw new Error('Missing platform (column or detectable URL required)')
+  let platform: string
+  if (platformInput) {
+    platform = platformInput.trim().toLowerCase()
+  } else if (platformFromHandle) {
+    platform = platformFromHandle
+  } else {
+    platform = DEFAULT_PLATFORM
   }
+
   if (!VALID_PLATFORMS.has(platform)) {
     throw new Error(`Unsupported platform "${platform}" (must be instagram or tiktok)`)
   }
 
-  const profileUrl = profileUrlInput.trim() || null
-
-  const followerCount = parseCount(getNum('follower_count', 'followers', 'audience', 'follower'))
-  const followingCount = parseCount(getNum('following_count', 'following'))
-  const postCount = parseCount(getNum('post_count', 'posts', 'post'))
-  const avgLikes = parseDecimal(getNum('avg_likes', 'average_likes', 'avg likes', 'likes'))
-  const avgComments = parseDecimal(getNum('avg_comments', 'average_comments', 'avg comments', 'comments'))
+  const followerCount = parseCount(get('follower_count', 'followers', 'audience', 'follower'))
+  const followingCount = parseCount(get('following_count', 'following'))
+  const postCount = parseCount(get('post_count', 'posts', 'post'))
+  const avgLikes = parseDecimal(get('avg_likes', 'average_likes', 'avg likes', 'likes'))
+  const avgComments = parseDecimal(get('avg_comments', 'average_comments', 'avg comments', 'comments'))
 
   let engagementRate = parseEngagementRate(
-    getNum('engagement_rate', 'engagement', 'engagement %', 'er')
+    get('engagement_rate', 'engagement', 'engagement %', 'er')
   )
-  if (engagementRate == null && avgLikes != null && avgComments != null && followerCount && followerCount > 0) {
+  if (
+    engagementRate == null &&
+    avgLikes != null &&
+    avgComments != null &&
+    followerCount &&
+    followerCount > 0
+  ) {
     engagementRate = (avgLikes + avgComments) / followerCount
   }
 
   return {
     handle,
     platform,
-    display_name: get('display_name', 'display name', 'full_name', 'full name', 'name')?.trim() || null,
-    profile_url: profileUrl,
+    display_name: displayName?.trim() || null,
+    profile_url: profileUrlInput.trim() || null,
     bio: get('bio', 'description', 'about')?.trim() || null,
     niche: get('niche', 'category', 'topic', 'interests', 'interest')?.trim() || null,
     follower_count: followerCount,
@@ -282,6 +358,40 @@ function normalizeRow(raw: RawRow): NormalizedRow {
     engagement_rate: engagementRate,
     raw,
   }
+}
+
+// Scans every cell in the row for a real handle: prefer URL matches (more
+// specific), fall back to @-prefix tokens. Returns the first match, with
+// platform set to whatever the URL implies, or DEFAULT_PLATFORM for bare
+// @-handles since IG is the only target right now.
+function scanForHandle(raw: RawRow): { handle: string; platform: string } | null {
+  for (const v of Object.values(raw)) {
+    const s = String(v ?? '').trim()
+    if (!s) continue
+    const ext = extractFromUrl(s)
+    if (ext.handle && ext.platform) return { handle: ext.handle, platform: ext.platform }
+  }
+  for (const v of Object.values(raw)) {
+    const s = String(v ?? '').trim()
+    if (!s.startsWith('@')) continue
+    const cleaned = s.slice(1).trim()
+    if (/^[a-z0-9_.]{1,30}$/i.test(cleaned)) {
+      return { handle: cleaned.toLowerCase(), platform: DEFAULT_PLATFORM }
+    }
+  }
+  return null
+}
+
+// "Pat Flynn" → "patflynn"
+// "Camille Adrian (Modern Millie)" → "camilleadrian"
+// "MrBeast" → "mrbeast"
+// Drops anything in parens (typically a stage name annotation), lowercases,
+// strips non-alphanumeric. Returns null on empty input or empty result.
+function slugifyName(name: string): string | null {
+  if (!name) return null
+  const beforeParen = name.split('(')[0]
+  const slug = beforeParen.toLowerCase().replace(/[^a-z0-9]/g, '')
+  return slug || null
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
