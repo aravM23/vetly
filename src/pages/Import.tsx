@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import Papa from 'papaparse'
-import { CheckCircle2, FileText, Loader2, Upload, X } from 'lucide-react'
+import { CheckCircle2, FileText, Loader2, Sparkles, Upload, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { triggerScoring } from '@/lib/scoring'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -116,6 +117,7 @@ export default function ImportPage() {
   const [rows, setRows] = useState<RawRow[]>([])
   const [mapping, setMapping] = useState<Mapping>(emptyMapping())
   const [importing, setImporting] = useState(false)
+  const [scoring, setScoring] = useState(false)
   const [result, setResult] = useState<ImportResult | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -439,11 +441,39 @@ export default function ImportPage() {
               <Button
                 type="button"
                 variant="outline"
-                disabled
+                disabled={scoring}
+                onClick={async () => {
+                  setScoring(true)
+                  try {
+                    const r = await triggerScoring()
+                    if (r.total === 0) {
+                      toast.success('Nothing to score, every Creator already has a score.')
+                    } else {
+                      toast.success(
+                        `Scored ${r.scored} of ${r.total}${
+                          r.errored > 0 ? ` (${r.errored} errored, retry to clear)` : ''
+                        }`
+                      )
+                    }
+                  } catch (e) {
+                    toast.error(`Scoring failed: ${e instanceof Error ? e.message : String(e)}`)
+                  } finally {
+                    setScoring(false)
+                  }
+                }}
                 className="smallcaps"
-                title="Wired in step 6"
               >
-                Score pending
+                {scoring ? (
+                  <>
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    Scoring
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-2 size-4" />
+                    Score pending
+                  </>
+                )}
               </Button>
               <Button type="button" onClick={reset} className="smallcaps bg-lime text-lime-ink hover:bg-lime/90">
                 Import another
