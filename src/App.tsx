@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router-dom'
 import AuthPage from '@/pages/Auth'
 import DashboardPage from '@/pages/Dashboard'
+import ImportPage from '@/pages/Import'
 import SettingsPage from '@/pages/Settings'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 
@@ -13,6 +14,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/import"
+        element={
+          <ProtectedRoute>
+            <ImportPage />
           </ProtectedRoute>
         }
       />

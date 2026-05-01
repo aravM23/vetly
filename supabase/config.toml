@@ -1,0 +1,18 @@
+project_id = "vetly"
+
+# ingest-creators is a public webhook called by external producers (Manus,
+# Lessee, manual curl). Auth is via the x-webhook-secret header matched
+# against user_settings.webhook_secret inside the function body, not via JWT.
+[functions.ingest-creators]
+verify_jwt = false
+
+# score-creators is invoked by the authenticated user from the dashboard.
+[functions.score-creators]
+verify_jwt = true
+
+# send-digest is dual-mode: JWT-authenticated for test sends, service-role
+# (bypassing JWT) for the cron path. verify_jwt = true keeps the test path
+# secure; the cron path uses Authorization: Bearer <service_role>, which the
+# JWT verifier accepts.
+[functions.send-digest]
+verify_jwt = true
