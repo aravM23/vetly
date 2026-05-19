@@ -37,9 +37,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { useNavigate } from 'react-router-dom'
 import {
   discoverApi,
-  getRuntimeMode,
   type DiscoverCandidate,
   type DiscoverRun,
   type DiscoverSettings,
@@ -49,6 +49,7 @@ import { cn } from '@/lib/utils'
 type StatusFilter = 'pending' | 'approved' | 'rejected' | 'all'
 
 export default function DiscoverPage() {
+  const navigate = useNavigate()
   const [candidates, setCandidates] = useState<DiscoverCandidate[] | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [running, setRunning] = useState(false)
@@ -56,7 +57,7 @@ export default function DiscoverPage() {
   const [settings, setSettings] = useState<DiscoverSettings | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending')
   const [scoreRange, setScoreRange] = useState<[number, number]>([0, 100])
-  const [mode, setMode] = useState<'live' | 'demo' | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -66,9 +67,10 @@ export default function DiscoverPage() {
       ])
       setCandidates(list)
       setLastRun(runs[0] ?? null)
-      setMode(getRuntimeMode())
+      setLoadError(null)
     } catch (e) {
-      toast.error(`Couldn't load Creators: ${e instanceof Error ? e.message : String(e)}`)
+      const msg = e instanceof Error ? e.message : String(e)
+      setLoadError(msg)
       setCandidates([])
     }
   }, [statusFilter])
@@ -130,7 +132,12 @@ export default function DiscoverPage() {
     setSelectedId(null)
     try {
       await discoverApi.approve(c.id)
-      toast.success(`Approved @${c.handle} — promoted to tracked Creator.`)
+      toast.success(`Approved @${c.handle} — now being tracked.`, {
+        action: {
+          label: 'View Tracked',
+          onClick: () => navigate('/tracked'),
+        },
+      })
     } catch (e) {
       setCandidates(prev)
       toast.error(`Couldn't approve: ${e instanceof Error ? e.message : String(e)}`)
@@ -152,10 +159,19 @@ export default function DiscoverPage() {
 
   return (
     <div className="min-h-screen">
-      <DiscoverHeader mode={mode} />
+      <DiscoverHeader />
 
       <main className="px-8 py-12">
         <div className="mx-auto max-w-6xl space-y-8">
+          {loadError && (
+            <div className="rounded-sm border border-danger/40 bg-danger/[0.06] px-4 py-3">
+              <p className="smallcaps text-danger">Backend unreachable</p>
+              <p className="mt-1 font-mono text-xs text-paper">{loadError}</p>
+              <p className="mt-1 font-mono text-[11px] text-paper-mute">
+                Start the FastAPI backend at <code className="text-paper">localhost:8000</code> or set <code className="text-paper">VITE_DISCOVER_API_BASE</code>.
+              </p>
+            </div>
+          )}
           <header className="flex items-end justify-between gap-4 border-b border-ink-3 pb-6">
             <div className="space-y-2">
               <p className="smallcaps text-paper-mute">Club Stanley · cohort 2 sourcing</p>
@@ -394,11 +410,13 @@ export default function DiscoverPage() {
 
 // ─── Header (matches Vetly's AppHeader visually, but stays auth-free) ──────
 
-function DiscoverHeader({ mode }: { mode: 'live' | 'demo' | null }) {
+function DiscoverHeader() {
   const links = [
     { to: '/', label: 'Dashboard' },
     { to: '/import', label: 'Import' },
     { to: '/discover', label: 'Discover' },
+    { to: '/sourcing', label: 'Sourcing' },
+    { to: '/tracked', label: 'Tracked' },
     { to: '/digest', label: 'Digest' },
     { to: '/settings', label: 'Settings' },
   ]
@@ -425,29 +443,8 @@ function DiscoverHeader({ mode }: { mode: 'live' | 'demo' | null }) {
             ))}
           </nav>
         </div>
-        <ModeChip mode={mode} />
       </div>
     </header>
-  )
-}
-
-function ModeChip({ mode }: { mode: 'live' | 'demo' | null }) {
-  if (mode === null) return null
-  const isLive = mode === 'live'
-  const dot = isLive ? 'bg-success' : 'bg-lime'
-  const label = isLive ? 'live · user #1' : 'demo mode'
-  return (
-    <span
-      title={
-        isLive
-          ? 'Backend reachable — calls hit FastAPI + OpenRouter.'
-          : 'Self-contained demo dataset (no backend configured). Approvals are saved to localStorage. Set VITE_DISCOVER_API_BASE to point at your backend to go live.'
-      }
-      className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-caps text-paper-mute"
-    >
-      <span className={cn('size-1.5 rounded-full', dot)} />
-      {label}
-    </span>
   )
 }
 

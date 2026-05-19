@@ -8,6 +8,7 @@ const links = [
   { to: '/import', label: 'Import', end: false },
   { to: '/discover', label: 'Discover', end: false },
   { to: '/sourcing', label: 'Sourcing', end: false },
+  { to: '/tracked', label: 'Tracked', end: false },
   { to: '/digest', label: 'Digest', end: false },
   { to: '/settings', label: 'Settings', end: false },
 ] as const

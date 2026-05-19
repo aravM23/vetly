@@ -6,6 +6,7 @@ import DiscoverPage from '@/pages/Discover'
 import ImportPage from '@/pages/Import'
 import SettingsPage from '@/pages/Settings'
 import SourcingPage from '@/pages/Sourcing'
+import TrackedPage from '@/pages/Tracked'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 
 export default function App() {
@@ -18,8 +19,10 @@ export default function App() {
         to the local FastAPI backend at /api (proxied by Vite).
       */}
       <Route path="/discover" element={<DiscoverPage />} />
-      {/* Sourcing metrics — also public so it works in demo mode on Vercel */}
+      {/* Sourcing metrics — public so it works without Supabase auth */}
       <Route path="/sourcing" element={<SourcingPage />} />
+      {/* Tracked creators — destination of every Discover -> Approve action */}
+      <Route path="/tracked" element={<TrackedPage />} />
       <Route
         path="/"
         element={

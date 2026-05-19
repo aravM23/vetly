@@ -33,10 +33,10 @@ import {
 } from '@/components/ui/table'
 import {
   discoverApi,
-  getRuntimeMode,
   type DiscoverCandidate,
   type DiscoverRun,
 } from '@/lib/discoverApi'
+import { trackedApi, type TrackedCreator } from '@/lib/trackedApi'
 import { cn } from '@/lib/utils'
 
 // LLM cost / projection assumptions, kept honest and conservative.
@@ -48,24 +48,27 @@ const PARTNER_CONVERSION = 0.1 // assume 1 in 10 high-fit Creators converts
 export default function SourcingPage() {
   const [candidates, setCandidates] = useState<DiscoverCandidate[] | null>(null)
   const [runs, setRuns] = useState<DiscoverRun[] | null>(null)
+  const [tracked, setTracked] = useState<TrackedCreator[] | null>(null)
   const [running, setRunning] = useState(false)
-  const [mode, setMode] = useState<'live' | 'demo' | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     try {
-      const [list, runHistory] = await Promise.all([
+      const [list, runHistory, trackedList] = await Promise.all([
         discoverApi.listCandidates({ status: 'all', minScore: 0, limit: 1000 }),
         discoverApi.listRuns(50),
+        trackedApi.list().catch(() => [] as TrackedCreator[]),
       ])
       setCandidates(list)
       setRuns(runHistory)
-      setMode(getRuntimeMode())
+      setTracked(trackedList)
+      setLoadError(null)
     } catch (e) {
-      toast.error(
-        `Couldn't load metrics: ${e instanceof Error ? e.message : String(e)}`
-      )
+      const msg = e instanceof Error ? e.message : String(e)
+      setLoadError(msg)
       setCandidates([])
       setRuns([])
+      setTracked([])
     }
   }, [])
 
@@ -91,14 +94,18 @@ export default function SourcingPage() {
   }
 
   const metrics = useMemo(() => {
-    if (!candidates || !runs) return null
-    return computeMetrics(candidates, runs)
-  }, [candidates, runs])
+    if (!candidates || !runs || !tracked) return null
+    return computeMetrics(candidates, runs, tracked)
+  }, [candidates, runs, tracked])
 
   if (!metrics) {
     return (
       <main className="grid min-h-[60vh] place-items-center">
-        <Loader2 className="size-5 animate-spin text-paper-mute" />
+        {loadError ? (
+          <BackendDown message={loadError} onRetry={load} />
+        ) : (
+          <Loader2 className="size-5 animate-spin text-paper-mute" />
+        )}
       </main>
     )
   }
@@ -107,8 +114,13 @@ export default function SourcingPage() {
   return (
     <main className="px-8 py-12">
       <div className="mx-auto max-w-6xl space-y-12">
+        {loadError && (
+          <div className="rounded-sm border border-danger/40 bg-danger/[0.06] px-4 py-3">
+            <p className="smallcaps text-danger">Backend unreachable</p>
+            <p className="mt-1 font-mono text-xs text-paper">{loadError}</p>
+          </div>
+        )}
         <SourcingHeader
-          mode={mode}
           totalRuns={runs?.length ?? 0}
           totalScored={m.lifetime.scored}
           running={running}
@@ -139,13 +151,11 @@ export default function SourcingPage() {
 // ─── Header ────────────────────────────────────────────────────────────────
 
 function SourcingHeader({
-  mode,
   totalRuns,
   totalScored,
   running,
   onRun,
 }: {
-  mode: 'live' | 'demo' | null
   totalRuns: number
   totalScored: number
   running: boolean
@@ -160,7 +170,10 @@ function SourcingHeader({
           </NavLink>
           <span>/</span>
           <span className="text-paper">Sourcing</span>
-          <ModeChip mode={mode} />
+          <span>/</span>
+          <NavLink to="/tracked" className="hover:text-paper">
+            Tracked
+          </NavLink>
         </nav>
         <Button
           type="button"
@@ -197,26 +210,27 @@ function SourcingHeader({
   )
 }
 
-function ModeChip({ mode }: { mode: 'live' | 'demo' | null }) {
-  if (!mode) return null
-  const isDemo = mode === 'demo'
+function BackendDown({
+  message,
+  onRetry,
+}: {
+  message: string
+  onRetry: () => void
+}) {
   return (
-    <span
-      className={cn(
-        'ml-3 inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 font-mono text-[10px] uppercase tracking-caps',
-        isDemo
-          ? 'border-paper-mute/40 text-paper-mute'
-          : 'border-lime/40 text-lime'
-      )}
-    >
-      <span
-        className={cn(
-          'size-1.5 rounded-full',
-          isDemo ? 'bg-paper-mute' : 'bg-lime'
-        )}
-      />
-      {isDemo ? 'demo data' : 'live'}
-    </span>
+    <div className="max-w-md rounded-sm border border-danger/40 bg-danger/[0.06] p-6 text-center">
+      <p className="smallcaps text-danger">Backend unreachable</p>
+      <p className="mt-2 font-mono text-xs text-paper">{message}</p>
+      <Button
+        type="button"
+        onClick={onRetry}
+        variant="outline"
+        size="sm"
+        className="smallcaps mt-4"
+      >
+        Try again
+      </Button>
+    </div>
   )
 }
 
@@ -238,7 +252,6 @@ function KpiRow({ m }: { m: Metrics }) {
         value={m.lifetime.highFit.toLocaleString()}
         delta={m.deltas.highFit}
         hint={`${m.lifetime.highFitRate.toFixed(0)}% of scored`}
-        accent
       />
       <KpiCard
         icon={<Radar className="size-4" />}
@@ -248,11 +261,12 @@ function KpiRow({ m }: { m: Metrics }) {
         hint="last 7 days"
       />
       <KpiCard
-        icon={<Globe2 className="size-4" />}
-        label="Reach"
-        value={formatCount(m.lifetime.reach)}
+        icon={<Users className="size-4" />}
+        label="Tracked"
+        value={m.lifetime.tracked.toLocaleString()}
         delta={null}
-        hint="followers · high-fit only"
+        hint="now in the velocity-alerts pipeline"
+        accent
       />
     </section>
   )
@@ -369,6 +383,12 @@ function FunnelSection({ m }: { m: Metrics }) {
       label: 'Approved',
       value: m.lifetime.approved,
       sub: pct(m.lifetime.approved, m.lifetime.highFit, 'of high fit'),
+      color: 'bg-lime',
+    },
+    {
+      label: 'Tracked (live)',
+      value: m.lifetime.tracked,
+      sub: pct(m.lifetime.tracked, m.lifetime.approved, 'of approved'),
       color: 'bg-success',
     },
   ]
@@ -919,6 +939,7 @@ type Metrics = {
     scored: number
     highFit: number
     approved: number
+    tracked: number
     highFitRate: number
     reach: number
     runsLast7d: number
@@ -936,7 +957,8 @@ type Metrics = {
 
 function computeMetrics(
   candidates: DiscoverCandidate[],
-  runs: DiscoverRun[]
+  runs: DiscoverRun[],
+  tracked: TrackedCreator[]
 ): Metrics {
   const totalRaw = runs.reduce((s, r) => s + r.raw_count, 0)
   const totalDedup = runs.reduce((s, r) => s + r.deduped_count, 0)
@@ -947,7 +969,12 @@ function computeMetrics(
     (c) => (c.score_overall ?? 0) >= HIGH_FIT_THRESHOLD
   )
   const approved = candidates.filter((c) => c.status === 'approved').length
-  const reach = highFit.reduce((s, c) => s + (c.follower_count ?? 0), 0)
+  const activeTracked = tracked.filter((t) => t.is_active).length
+  const reach = activeTracked
+    ? tracked
+        .filter((t) => t.is_active)
+        .reduce((s, t) => s + (t.follower_count ?? 0), 0)
+    : highFit.reduce((s, c) => s + (c.follower_count ?? 0), 0)
   const highFitRate =
     totalScored > 0 ? (highFit.length / totalScored) * 100 : 0
 
@@ -978,6 +1005,7 @@ function computeMetrics(
       scored: totalScored,
       highFit: highFit.length,
       approved,
+      tracked: activeTracked,
       highFitRate,
       reach,
       runsLast7d: last7.length,
