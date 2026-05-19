@@ -307,7 +307,17 @@ export default function DiscoverPage() {
                         </TableCell>
                         <TableCell className="py-2">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono text-sm text-paper">@{c.handle}</span>
+                            <a
+                              href={`https://instagram.com/${c.handle}/`}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              title={`Open @${c.handle} on Instagram`}
+                              className="group inline-flex items-center gap-1 font-mono text-sm text-paper hover:text-lime"
+                            >
+                              @{c.handle}
+                              <ExternalLink className="size-3 opacity-0 transition group-hover:opacity-100" />
+                            </a>
                             {c.is_outlier_flagged && (
                               <span
                                 title="Sub-floor outlier — tapped-in audience"
