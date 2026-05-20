@@ -1,18 +1,12 @@
 /**
- * Vetly Dashboard — the main page after login.
+ * Discover — the one and only sourcing page.
  *
- * Original Vetly version read from Supabase `creators`. Replaced (just the
- * <main> body — AppHeader, ProtectedRoute, login flow are untouched) so it
- * showcases the real creators sourced by the Club Stanley discovery pipeline:
+ *   1. Hero KPIs: what's in Club Stanley, what's high-fit, what's pending.
+ *   2. Club Stanley shortlist preview: glance at the editorial picks.
+ *   3. Top picks pending review: high-score candidates from the latest
+ *      discovery run, with inline Shortlist / Approve / Reject + Open-on-IG.
  *
- *   1. Tracked (live) — already approved, being watched by the velocity-alerts
- *      scheduler.
- *   2. Top picks pending review — high-score candidates from the latest
- *      discovery run, with inline approve / reject + an Open-on-IG link.
- *
- * All data comes from the FastAPI backend (discoverApi + trackedApi). No
- * Supabase reads. Vetly's editorial design tokens (ink/paper/lime, Instrument
- * Serif headlines, JetBrains Mono stats) are preserved.
+ * Data comes from the FastAPI backend (discoverApi). No auth, no extra pages.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -24,8 +18,7 @@ import {
   Radar,
   Sparkles,
   Star,
-  TrendingUp,
-  Users,
+  Trophy,
   XCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -44,38 +37,41 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { useAuth } from '@/lib/auth'
 import {
   discoverApi,
   type DiscoverCandidate,
 } from '@/lib/discoverApi'
-import { trackedApi, type TrackedCreator } from '@/lib/trackedApi'
 import { cn } from '@/lib/utils'
 
 const HIGH_FIT_THRESHOLD = 80
 
 export default function DashboardPage() {
-  const { user } = useAuth()
   const navigate = useNavigate()
   const [candidates, setCandidates] = useState<DiscoverCandidate[] | null>(null)
-  const [tracked, setTracked] = useState<TrackedCreator[] | null>(null)
+  const [shortlist, setShortlist] = useState<DiscoverCandidate[] | null>(null)
+  // Lifetime sourced count — used for the conversion-rate KPI on Hero.
+  const [sourcedTotal, setSourcedTotal] = useState<number>(0)
   const [running, setRunning] = useState(false)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     try {
-      const [cands, trk] = await Promise.all([
+      const [cands, sl, allSourced] = await Promise.all([
         discoverApi.listCandidates({ status: 'pending', minScore: 0, limit: 200 }),
-        trackedApi.list().catch(() => [] as TrackedCreator[]),
+        discoverApi.listShortlist(500).catch(() => [] as DiscoverCandidate[]),
+        discoverApi
+          .listCandidates({ status: 'all', minScore: 0, limit: 2000 })
+          .catch(() => [] as DiscoverCandidate[]),
       ])
       setCandidates(cands)
-      setTracked(trk)
+      setShortlist(sl)
+      setSourcedTotal(allSourced.length)
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
       setCandidates([])
-      setTracked([])
+      setShortlist([])
     }
   }, [])
 
@@ -125,6 +121,45 @@ export default function DashboardPage() {
     }
   }
 
+  async function toggleShortlist(c: DiscoverCandidate) {
+    const next = !c.is_shortlisted
+    const patch = (r: DiscoverCandidate) =>
+      r.id === c.id
+        ? {
+            ...r,
+            is_shortlisted: next,
+            shortlisted_at: next ? new Date().toISOString() : null,
+          }
+        : r
+    setCandidates((rows) => rows?.map(patch) ?? null)
+    setShortlist((rows) => {
+      if (!rows) return null
+      if (next) {
+        if (rows.find((r) => r.id === c.id)) return rows.map(patch)
+        return [{ ...c, is_shortlisted: true, shortlisted_at: new Date().toISOString() }, ...rows]
+      }
+      return rows.filter((r) => r.id !== c.id)
+    })
+    try {
+      if (next) {
+        await discoverApi.shortlist(c.id)
+        toast.success(`Shortlisted @${c.handle} for Club Stanley.`, {
+          action: {
+            label: 'View cohort',
+            onClick: () => navigate('/shortlist'),
+          },
+        })
+      } else {
+        await discoverApi.unshortlist(c.id)
+        toast.success(`Removed @${c.handle} from Club Stanley.`)
+      }
+    } catch (e) {
+      // Re-sync from backend on failure rather than try to surgically undo.
+      void load()
+      toast.error(`Couldn't update shortlist: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
   const highFitPending = useMemo(() => {
     if (!candidates) return []
     return [...candidates]
@@ -132,26 +167,19 @@ export default function DashboardPage() {
       .sort((a, b) => (b.score_overall ?? 0) - (a.score_overall ?? 0))
   }, [candidates])
 
-  const trackedActive = useMemo(
-    () => (tracked ?? []).filter((t) => t.is_active),
-    [tracked]
-  )
-
   const stats = useMemo(
     () => ({
-      tracked: trackedActive.length,
       pending: candidates?.length ?? 0,
       highFit: highFitPending.length,
-      reach:
-        trackedActive.reduce((s, t) => s + (t.follower_count ?? 0), 0) +
-        highFitPending.reduce((s, c) => s + (c.follower_count ?? 0), 0),
+      shortlisted: shortlist?.length ?? 0,
+      sourced: sourcedTotal,
     }),
-    [trackedActive, candidates, highFitPending]
+    [candidates, highFitPending, shortlist, sourcedTotal]
   )
 
   const selected = candidates?.find((c) => c.id === selectedId) ?? null
 
-  if (!candidates || !tracked) {
+  if (!candidates || !shortlist) {
     if (error) {
       return (
         <main className="px-8 py-12">
@@ -178,16 +206,9 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <Hero
-          email={user?.email ?? null}
-          stats={stats}
-          running={running}
-          onRun={runDiscovery}
-        />
+        <Hero stats={stats} running={running} onRun={runDiscovery} />
 
-        {trackedActive.length > 0 && (
-          <TrackedSection rows={trackedActive} />
-        )}
+        {shortlist.length > 0 && <ShortlistSection rows={shortlist} />}
 
         <PendingSection
           rows={highFitPending}
@@ -196,6 +217,7 @@ export default function DashboardPage() {
           onSelect={setSelectedId}
           onApprove={approve}
           onReject={reject}
+          onToggleShortlist={toggleShortlist}
           onRun={runDiscovery}
           running={running}
         />
@@ -213,6 +235,7 @@ export default function DashboardPage() {
               candidate={selected}
               onApprove={() => approve(selected)}
               onReject={() => reject(selected)}
+              onToggleShortlist={() => toggleShortlist(selected)}
             />
           )}
         </SheetContent>
@@ -224,29 +247,32 @@ export default function DashboardPage() {
 // ─── Hero ──────────────────────────────────────────────────────────────────
 
 function Hero({
-  email,
   stats,
   running,
   onRun,
 }: {
-  email: string | null
-  stats: { tracked: number; pending: number; highFit: number; reach: number }
+  stats: {
+    pending: number
+    highFit: number
+    shortlisted: number
+    sourced: number
+  }
   running: boolean
   onRun: () => void
 }) {
+  const pickRate =
+    stats.sourced > 0 ? ((stats.shortlisted / stats.sourced) * 100).toFixed(1) : '0.0'
   return (
     <header className="space-y-6 border-b border-ink-3 pb-8">
       <div className="flex items-end justify-between gap-4">
         <div className="space-y-2">
-          <p className="smallcaps text-paper-mute">
-            {email ? `Signed in as ${email}` : 'Club Stanley · sourcing'}
-          </p>
+          <p className="smallcaps text-paper-mute">Club Stanley · sourcing</p>
           <h1 className="font-display text-4xl text-paper sm:text-5xl">
-            Your creator pipeline.
+            Discover creators.
           </h1>
           <p className="font-mono text-xs text-paper-mute">
-            {stats.tracked} tracked · {stats.highFit} high-fit pending review ·{' '}
-            {formatCount(stats.reach)} total reach
+            {stats.shortlisted} in Club Stanley · {stats.highFit} high-fit pending ·{' '}
+            {stats.sourced.toLocaleString()} sourced lifetime
           </p>
         </div>
         <Button
@@ -269,31 +295,25 @@ function Hero({
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard
-          icon={<Users className="size-4" />}
-          label="Tracked"
-          value={stats.tracked.toLocaleString()}
-          hint="live in the pipeline"
+          icon={<Trophy className="size-4" />}
+          label="Club Stanley"
+          value={stats.shortlisted.toLocaleString()}
+          hint={`${pickRate}% of sourced`}
           accent
         />
         <StatCard
           icon={<Star className="size-4" />}
           label="High fit ≥ 80"
           value={stats.highFit.toLocaleString()}
-          hint="ready to approve"
+          hint="ready to shortlist"
         />
         <StatCard
           icon={<Radar className="size-4" />}
           label="Total pending"
           value={stats.pending.toLocaleString()}
           hint="awaiting review"
-        />
-        <StatCard
-          icon={<TrendingUp className="size-4" />}
-          label="Reach"
-          value={formatCount(stats.reach)}
-          hint="followers · tracked + high-fit"
         />
       </div>
     </header>
@@ -337,79 +357,63 @@ function StatCard({
   )
 }
 
-// ─── Tracked section ──────────────────────────────────────────────────────
+// ─── Club Stanley shortlist section ───────────────────────────────────────
 
-function TrackedSection({ rows }: { rows: TrackedCreator[] }) {
+function ShortlistSection({ rows }: { rows: DiscoverCandidate[] }) {
+  const preview = [...rows]
+    .sort((a, b) => (b.score_overall ?? 0) - (a.score_overall ?? 0))
+    .slice(0, 4)
   return (
     <section className="space-y-4">
       <div className="flex items-baseline justify-between">
         <div>
           <h2 className="font-display text-2xl text-paper">
-            Currently tracking
+            Club Stanley shortlist
           </h2>
           <p className="mt-1 font-mono text-[11px] text-paper-mute">
-            Live creators in the velocity-alerts pipeline
+            {rows.length} creators picked for the cohort
           </p>
         </div>
         <a
-          href="/tracked"
+          href="/shortlist"
           className="font-mono text-xs text-lime hover:underline"
         >
-          view all →
+          view cohort →
         </a>
       </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {rows.slice(0, 6).map((t) => (
-          <TrackedCard key={t.id} c={t} />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {preview.map((c) => (
+          <ShortlistChip key={c.id} c={c} />
         ))}
       </div>
     </section>
   )
 }
 
-function TrackedCard({ c }: { c: TrackedCreator }) {
+function ShortlistChip({ c }: { c: DiscoverCandidate }) {
   return (
-    <div className="rounded-sm border border-ink-3 bg-ink-2 p-5 transition hover:border-lime/40">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <Avatar handle={c.instagram_handle} />
-          <div className="min-w-0">
-            <a
-              href={`https://instagram.com/${c.instagram_handle}/`}
-              target="_blank"
-              rel="noreferrer"
-              className="group inline-flex items-center gap-1 font-mono text-sm text-paper hover:text-lime"
-            >
-              @{c.instagram_handle}
-              <ExternalLink className="size-3 opacity-0 transition group-hover:opacity-100" />
-            </a>
-            {c.display_name && (
-              <p className="font-display text-lg text-paper leading-tight">
-                {c.display_name}
-              </p>
-            )}
-          </div>
-        </div>
-        <span className="inline-flex items-center gap-1 rounded-sm border border-lime/40 bg-lime/[0.08] px-2 py-0.5 font-mono text-[10px] uppercase tracking-caps text-lime">
-          <span className="size-1.5 rounded-full bg-lime" />
-          live
+    <a
+      href={`https://instagram.com/${c.handle}/`}
+      target="_blank"
+      rel="noreferrer"
+      className="group flex items-center gap-3 rounded-sm border border-lime/30 bg-lime/[0.04] p-3 transition hover:border-lime/60 hover:bg-lime/[0.08]"
+    >
+      <Avatar handle={c.handle} size="sm" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-mono text-sm text-paper group-hover:text-lime">
+          @{c.handle}
+        </p>
+        <p className="truncate font-mono text-[10px] text-paper-mute">
+          {formatCount(c.follower_count)} ·{' '}
+          {c.timezone_bucket ?? c.country_guess ?? '—'}
+        </p>
+      </div>
+      {c.score_overall != null && (
+        <span className="font-mono text-xs tabular-nums text-lime">
+          {c.score_overall}
         </span>
-      </div>
-      <div className="mt-4 grid grid-cols-3 gap-2 border-t border-ink-3 pt-3">
-        <Metric label="Followers" value={formatCount(c.follower_count)} />
-        <Metric label="Avg views" value={formatCount(c.avg_views)} />
-        <Metric label="Avg likes" value={formatCount(c.avg_likes)} />
-      </div>
-    </div>
-  )
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="smallcaps text-paper-mute">{label}</p>
-      <p className="font-mono text-sm tabular-nums text-paper">{value}</p>
-    </div>
+      )}
+    </a>
   )
 }
 
@@ -422,6 +426,7 @@ function PendingSection({
   onSelect,
   onApprove,
   onReject,
+  onToggleShortlist,
   onRun,
   running,
 }: {
@@ -431,6 +436,7 @@ function PendingSection({
   onSelect: (id: number) => void
   onApprove: (c: DiscoverCandidate) => void
   onReject: (c: DiscoverCandidate) => void
+  onToggleShortlist: (c: DiscoverCandidate) => void
   onRun: () => void
   running: boolean
 }) {
@@ -541,7 +547,41 @@ function PendingSection({
                       {formatCount(c.follower_count)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="inline-flex gap-1">
+                      <div className="inline-flex items-center gap-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onToggleShortlist(c)
+                          }}
+                          className={cn(
+                            'smallcaps h-7 px-2',
+                            c.is_shortlisted
+                              ? 'bg-lime/[0.12] border border-lime/40 text-lime hover:bg-lime/[0.2]'
+                              : 'bg-ink-2 border border-ink-3 text-paper-mute hover:border-lime/40 hover:text-lime'
+                          )}
+                          title={
+                            c.is_shortlisted
+                              ? 'Remove from Club Stanley'
+                              : 'Shortlist for Club Stanley'
+                          }
+                        >
+                          {c.is_shortlisted ? (
+                            <>
+                              <XCircle className="size-3 mr-1" />
+                              Remove
+                            </>
+                          ) : (
+                            <>
+                              <Star
+                                className="size-3 mr-1"
+                                fill="currentColor"
+                              />
+                              Shortlist
+                            </>
+                          )}
+                        </Button>
                         <Button
                           type="button"
                           size="sm"
@@ -632,10 +672,12 @@ function CandidateDrawer({
   candidate,
   onApprove,
   onReject,
+  onToggleShortlist,
 }: {
   candidate: DiscoverCandidate
   onApprove: () => void
   onReject: () => void
+  onToggleShortlist: () => void
 }) {
   const c = candidate
   return (
@@ -750,24 +792,51 @@ function CandidateDrawer({
         />
       </section>
 
-      <section className="grid grid-cols-2 gap-2 border-t border-ink-3 pt-6">
+      <section className="space-y-2 border-t border-ink-3 pt-6">
         <Button
           type="button"
-          onClick={onApprove}
-          className="smallcaps bg-success text-ink hover:bg-success/90"
+          onClick={onToggleShortlist}
+          className={cn(
+            'smallcaps w-full',
+            c.is_shortlisted
+              ? 'bg-ink-2 border border-lime/40 text-lime hover:bg-ink-3'
+              : 'bg-lime text-lime-ink hover:bg-lime/90'
+          )}
         >
-          <CheckCircle2 className="mr-1 size-4" />
-          Approve & track
+          {c.is_shortlisted ? (
+            <>
+              <XCircle className="mr-1 size-4" />
+              Remove from Club Stanley
+            </>
+          ) : (
+            <>
+              <Star className="mr-1 size-4" fill="currentColor" />
+              Shortlist for Club Stanley
+            </>
+          )}
         </Button>
-        <Button
-          type="button"
-          onClick={onReject}
-          variant="outline"
-          className="smallcaps border-ink-3"
-        >
-          <XCircle className="mr-1 size-4" />
-          Reject
-        </Button>
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            type="button"
+            onClick={onApprove}
+            className="smallcaps bg-success text-ink hover:bg-success/90"
+          >
+            <CheckCircle2 className="mr-1 size-4" />
+            Approve & track
+          </Button>
+          <Button
+            type="button"
+            onClick={onReject}
+            variant="outline"
+            className="smallcaps border-ink-3"
+          >
+            <XCircle className="mr-1 size-4" />
+            Reject
+          </Button>
+        </div>
+        <p className="text-[11px] text-paper-mute">
+          <span className="text-lime">Shortlist</span> picks the creator for the Club Stanley cohort dashboard. <span className="text-paper">Approve</span> kicks off the velocity-alerts pipeline.
+        </p>
       </section>
     </div>
   )

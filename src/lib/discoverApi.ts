@@ -49,6 +49,8 @@ export type DiscoverCandidate = {
   score_overall: number | null
   score_reasoning: string | null
   status: CandidateStatus
+  is_shortlisted: boolean
+  shortlisted_at: string | null
   first_seen_at: string
 }
 
@@ -150,13 +152,21 @@ export const discoverApi = {
   listRuns: (limit = 10) => call<DiscoverRun[]>(`/runs?limit=${limit}`),
 
   listCandidates: (
-    opts: { status?: 'pending' | 'approved' | 'rejected' | 'all'; minScore?: number; limit?: number } = {}
+    opts: {
+      status?: 'pending' | 'approved' | 'rejected' | 'all'
+      minScore?: number
+      limit?: number
+      shortlisted?: boolean
+    } = {}
   ) => {
     const params = new URLSearchParams({
       status: opts.status ?? 'pending',
       min_score: String(opts.minScore ?? 0),
       limit: String(opts.limit ?? 100),
     })
+    if (typeof opts.shortlisted === 'boolean') {
+      params.set('shortlisted', String(opts.shortlisted))
+    }
     return call<DiscoverCandidate[]>(`/candidates?${params}`)
   },
 
@@ -165,6 +175,20 @@ export const discoverApi = {
 
   reject: (candidateId: number) =>
     call<DiscoverCandidate>(`/candidates/${candidateId}/reject`, { method: 'POST' }),
+
+  /** Pick a candidate for the Club Stanley cohort. */
+  shortlist: (candidateId: number) =>
+    call<DiscoverCandidate>(`/candidates/${candidateId}/shortlist`, { method: 'POST' }),
+
+  /** Remove a candidate from the Club Stanley cohort. */
+  unshortlist: (candidateId: number) =>
+    call<DiscoverCandidate>(`/candidates/${candidateId}/shortlist`, { method: 'DELETE' }),
+
+  /** All candidates currently shortlisted for Club Stanley (any status). */
+  listShortlist: (limit = 500) =>
+    call<DiscoverCandidate[]>(
+      `/candidates?status=all&min_score=0&shortlisted=true&limit=${limit}`
+    ),
 
   getSettings: () => call<DiscoverSettings>('/settings'),
 
