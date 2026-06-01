@@ -5,15 +5,30 @@
  * backend is unreachable, callers see the raw error and the UI surfaces it.
  *
  * Configure the base URL via:
- *   - VITE_DISCOVER_API_BASE   (e.g. https://api.stanwith.com)
+ *   - VITE_DISCOVER_API_BASE   (e.g. https://api.stanwith.com/api)
  *   - or leave unset to use the Vite dev proxy at /api
+ *
+ * Programs:
+ *   - 'club_stanley'  → emerging social-media coaches incubator (user_id=1)
+ *   - 'ambassador'    → Stanley Ambassador channel-operators (user_id=2)
+ *
+ * Both programs share the schema; the backend dispatches different prompts
+ * + ICP defaults based on DiscoverySettings.program for the matching user.
  */
 
 const ENV_API_BASE = import.meta.env.VITE_DISCOVER_API_BASE as string | undefined
 const API_BASE = (ENV_API_BASE ?? '/api').replace(/\/$/, '')
 
-// Until auth is wired through, the single demo user owns everything.
-export const DISCOVER_USER_ID = 1
+export type Program = 'club_stanley' | 'ambassador'
+
+export const PROGRAMS: Record<Program, { id: number; label: string; slug: string }> = {
+  club_stanley: { id: 1, label: 'Club Stanley', slug: 'club-stanley' },
+  ambassador: { id: 2, label: 'Stanley Ambassadors', slug: 'ambassadors' },
+}
+
+// Kept for backward compatibility with any caller still importing this.
+// New code should read `PROGRAMS[program].id` instead.
+export const DISCOVER_USER_ID = PROGRAMS.club_stanley.id
 
 export type CandidateStatus = 'pending' | 'approved' | 'rejected' | 'duplicate' | 'errored'
 
@@ -82,8 +97,8 @@ export type DiscoverSettings = {
   digest_size: number
 }
 
-async function call<T>(path: string, init?: RequestInit): Promise<T> {
-  const url = `${API_BASE}/users/${DISCOVER_USER_ID}/discover${path}`
+async function call<T>(path: string, init: RequestInit | undefined, userId: number): Promise<T> {
+  const url = `${API_BASE}/users/${userId}/discover${path}`
   let res: Response
   try {
     res = await fetch(url, {
@@ -138,60 +153,69 @@ async function formatHttpError(res: Response, url: string): Promise<string> {
   return fallback
 }
 
-export const discoverApi = {
-  run: (opts: { useScrapers?: boolean; perSourceLimit?: number | null; runSync?: boolean } = {}) =>
-    call<DiscoverRun>('/run', {
-      method: 'POST',
-      body: JSON.stringify({
-        use_scrapers: opts.useScrapers ?? true,
-        per_source_limit: opts.perSourceLimit ?? null,
-        run_sync: opts.runSync ?? true,
+export type DiscoverApi = ReturnType<typeof createDiscoverApi>
+
+export function createDiscoverApi(program: Program) {
+  const userId = PROGRAMS[program].id
+  const c = <T,>(path: string, init?: RequestInit) => call<T>(path, init, userId)
+  return {
+    program,
+    userId,
+
+    run: (opts: { useScrapers?: boolean; perSourceLimit?: number | null; runSync?: boolean } = {}) =>
+      c<DiscoverRun>('/run', {
+        method: 'POST',
+        body: JSON.stringify({
+          use_scrapers: opts.useScrapers ?? true,
+          per_source_limit: opts.perSourceLimit ?? null,
+          run_sync: opts.runSync ?? true,
+        }),
       }),
-    }),
 
-  listRuns: (limit = 10) => call<DiscoverRun[]>(`/runs?limit=${limit}`),
+    listRuns: (limit = 10) => c<DiscoverRun[]>(`/runs?limit=${limit}`),
 
-  listCandidates: (
-    opts: {
-      status?: 'pending' | 'approved' | 'rejected' | 'all'
-      minScore?: number
-      limit?: number
-      shortlisted?: boolean
-    } = {}
-  ) => {
-    const params = new URLSearchParams({
-      status: opts.status ?? 'pending',
-      min_score: String(opts.minScore ?? 0),
-      limit: String(opts.limit ?? 100),
-    })
-    if (typeof opts.shortlisted === 'boolean') {
-      params.set('shortlisted', String(opts.shortlisted))
-    }
-    return call<DiscoverCandidate[]>(`/candidates?${params}`)
-  },
+    listCandidates: (
+      opts: {
+        status?: 'pending' | 'approved' | 'rejected' | 'all'
+        minScore?: number
+        limit?: number
+        shortlisted?: boolean
+      } = {}
+    ) => {
+      const params = new URLSearchParams({
+        status: opts.status ?? 'pending',
+        min_score: String(opts.minScore ?? 0),
+        limit: String(opts.limit ?? 100),
+      })
+      if (typeof opts.shortlisted === 'boolean') {
+        params.set('shortlisted', String(opts.shortlisted))
+      }
+      return c<DiscoverCandidate[]>(`/candidates?${params}`)
+    },
 
-  approve: (candidateId: number) =>
-    call<DiscoverCandidate>(`/candidates/${candidateId}/approve`, { method: 'POST' }),
+    approve: (candidateId: number) =>
+      c<DiscoverCandidate>(`/candidates/${candidateId}/approve`, { method: 'POST' }),
 
-  reject: (candidateId: number) =>
-    call<DiscoverCandidate>(`/candidates/${candidateId}/reject`, { method: 'POST' }),
+    reject: (candidateId: number) =>
+      c<DiscoverCandidate>(`/candidates/${candidateId}/reject`, { method: 'POST' }),
 
-  /** Pick a candidate for the Club Stanley cohort. */
-  shortlist: (candidateId: number) =>
-    call<DiscoverCandidate>(`/candidates/${candidateId}/shortlist`, { method: 'POST' }),
+    shortlist: (candidateId: number) =>
+      c<DiscoverCandidate>(`/candidates/${candidateId}/shortlist`, { method: 'POST' }),
 
-  /** Remove a candidate from the Club Stanley cohort. */
-  unshortlist: (candidateId: number) =>
-    call<DiscoverCandidate>(`/candidates/${candidateId}/shortlist`, { method: 'DELETE' }),
+    unshortlist: (candidateId: number) =>
+      c<DiscoverCandidate>(`/candidates/${candidateId}/shortlist`, { method: 'DELETE' }),
 
-  /** All candidates currently shortlisted for Club Stanley (any status). */
-  listShortlist: (limit = 500) =>
-    call<DiscoverCandidate[]>(
-      `/candidates?status=all&min_score=0&shortlisted=true&limit=${limit}`
-    ),
+    listShortlist: (limit = 500) =>
+      c<DiscoverCandidate[]>(
+        `/candidates?status=all&min_score=0&shortlisted=true&limit=${limit}`
+      ),
 
-  getSettings: () => call<DiscoverSettings>('/settings'),
+    getSettings: () => c<DiscoverSettings>('/settings'),
 
-  updateSettings: (patch: Partial<DiscoverSettings>) =>
-    call<DiscoverSettings>('/settings', { method: 'PUT', body: JSON.stringify(patch) }),
+    updateSettings: (patch: Partial<DiscoverSettings>) =>
+      c<DiscoverSettings>('/settings', { method: 'PUT', body: JSON.stringify(patch) }),
+  }
 }
+
+// Default export: Club Stanley client (preserves existing call sites).
+export const discoverApi = createDiscoverApi('club_stanley')

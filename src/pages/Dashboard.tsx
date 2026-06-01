@@ -1,12 +1,17 @@
 /**
- * Discover — the one and only sourcing page.
+ * Discover — the sourcing page, parameterized by program.
  *
- *   1. Hero KPIs: what's in Club Stanley, what's high-fit, what's pending.
- *   2. Club Stanley shortlist preview: glance at the editorial picks.
+ * Two programs live on this page:
+ *   - 'club_stanley' (default) → emerging social-media coaches incubator
+ *   - 'ambassador'             → Stanley Ambassador (channel-operator) program
+ *
+ * Layout:
+ *   1. Hero KPIs: what's in the cohort, what's high-fit, what's pending.
+ *   2. Cohort shortlist preview: glance at the editorial picks.
  *   3. Top picks pending review: high-score candidates from the latest
  *      discovery run, with inline Shortlist / Approve / Reject + Open-on-IG.
  *
- * Data comes from the FastAPI backend (discoverApi). No auth, no extra pages.
+ * Data comes from the FastAPI backend via createDiscoverApi(program).
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -38,15 +43,23 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import {
-  discoverApi,
+  PROGRAMS,
+  createDiscoverApi,
   type DiscoverCandidate,
+  type Program,
 } from '@/lib/discoverApi'
 import { cn } from '@/lib/utils'
 
 const HIGH_FIT_THRESHOLD = 80
 
-export default function DashboardPage() {
+type DashboardProps = { program?: Program }
+
+export default function DashboardPage({ program = 'club_stanley' }: DashboardProps) {
   const navigate = useNavigate()
+  const api = useMemo(() => createDiscoverApi(program), [program])
+  const programInfo = PROGRAMS[program]
+  const shortlistPath = program === 'club_stanley' ? '/shortlist' : `/${programInfo.slug}/shortlist`
+
   const [candidates, setCandidates] = useState<DiscoverCandidate[] | null>(null)
   const [shortlist, setShortlist] = useState<DiscoverCandidate[] | null>(null)
   // Lifetime sourced count — used for the conversion-rate KPI on Hero.
@@ -58,9 +71,9 @@ export default function DashboardPage() {
   const load = useCallback(async () => {
     try {
       const [cands, sl, allSourced] = await Promise.all([
-        discoverApi.listCandidates({ status: 'pending', minScore: 0, limit: 200 }),
-        discoverApi.listShortlist(500).catch(() => [] as DiscoverCandidate[]),
-        discoverApi
+        api.listCandidates({ status: 'pending', minScore: 0, limit: 200 }),
+        api.listShortlist(500).catch(() => [] as DiscoverCandidate[]),
+        api
           .listCandidates({ status: 'all', minScore: 0, limit: 2000 })
           .catch(() => [] as DiscoverCandidate[]),
       ])
@@ -73,7 +86,7 @@ export default function DashboardPage() {
       setCandidates([])
       setShortlist([])
     }
-  }, [])
+  }, [api])
 
   useEffect(() => {
     void load()
@@ -82,7 +95,7 @@ export default function DashboardPage() {
   async function runDiscovery() {
     setRunning(true)
     try {
-      const run = await discoverApi.run({ useScrapers: true, runSync: true })
+      const run = await api.run({ useScrapers: true, runSync: true })
       toast.success(`Sourced ${run.scored_count} new creators.`)
       await load()
     } catch (e) {
@@ -97,10 +110,8 @@ export default function DashboardPage() {
     setCandidates((rows) => rows?.filter((r) => r.id !== c.id) ?? null)
     setSelectedId(null)
     try {
-      await discoverApi.approve(c.id)
-      toast.success(`Approved @${c.handle} — now tracking.`, {
-        action: { label: 'View Tracked', onClick: () => navigate('/tracked') },
-      })
+      await api.approve(c.id)
+      toast.success(`Approved @${c.handle} — now tracking.`)
       await load()
     } catch (e) {
       setCandidates(prev)
@@ -113,7 +124,7 @@ export default function DashboardPage() {
     setCandidates((rows) => rows?.filter((r) => r.id !== c.id) ?? null)
     setSelectedId(null)
     try {
-      await discoverApi.reject(c.id)
+      await api.reject(c.id)
       toast.success(`Rejected @${c.handle}.`)
     } catch (e) {
       setCandidates(prev)
@@ -142,16 +153,16 @@ export default function DashboardPage() {
     })
     try {
       if (next) {
-        await discoverApi.shortlist(c.id)
-        toast.success(`Shortlisted @${c.handle} for Club Stanley.`, {
+        await api.shortlist(c.id)
+        toast.success(`Shortlisted @${c.handle} for ${programInfo.label}.`, {
           action: {
             label: 'View cohort',
-            onClick: () => navigate('/shortlist'),
+            onClick: () => navigate(shortlistPath),
           },
         })
       } else {
-        await discoverApi.unshortlist(c.id)
-        toast.success(`Removed @${c.handle} from Club Stanley.`)
+        await api.unshortlist(c.id)
+        toast.success(`Removed @${c.handle} from ${programInfo.label}.`)
       }
     } catch (e) {
       // Re-sync from backend on failure rather than try to surgically undo.
@@ -206,9 +217,20 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <Hero stats={stats} running={running} onRun={runDiscovery} />
+        <Hero
+          stats={stats}
+          running={running}
+          onRun={runDiscovery}
+          programLabel={programInfo.label}
+        />
 
-        {shortlist.length > 0 && <ShortlistSection rows={shortlist} />}
+        {shortlist.length > 0 && (
+          <ShortlistSection
+            rows={shortlist}
+            programLabel={programInfo.label}
+            shortlistPath={shortlistPath}
+          />
+        )}
 
         <PendingSection
           rows={highFitPending}
@@ -220,6 +242,7 @@ export default function DashboardPage() {
           onToggleShortlist={toggleShortlist}
           onRun={runDiscovery}
           running={running}
+          programLabel={programInfo.label}
         />
       </div>
 
@@ -236,6 +259,7 @@ export default function DashboardPage() {
               onApprove={() => approve(selected)}
               onReject={() => reject(selected)}
               onToggleShortlist={() => toggleShortlist(selected)}
+              programLabel={programInfo.label}
             />
           )}
         </SheetContent>
@@ -250,6 +274,7 @@ function Hero({
   stats,
   running,
   onRun,
+  programLabel,
 }: {
   stats: {
     pending: number
@@ -259,6 +284,7 @@ function Hero({
   }
   running: boolean
   onRun: () => void
+  programLabel: string
 }) {
   const pickRate =
     stats.sourced > 0 ? ((stats.shortlisted / stats.sourced) * 100).toFixed(1) : '0.0'
@@ -266,12 +292,12 @@ function Hero({
     <header className="space-y-6 border-b border-ink-3 pb-8">
       <div className="flex items-end justify-between gap-4">
         <div className="space-y-2">
-          <p className="smallcaps text-paper-mute">Club Stanley · sourcing</p>
+          <p className="smallcaps text-paper-mute">{programLabel} · sourcing</p>
           <h1 className="font-display text-4xl text-paper sm:text-5xl">
             Discover creators.
           </h1>
           <p className="font-mono text-xs text-paper-mute">
-            {stats.shortlisted} in Club Stanley · {stats.highFit} high-fit pending ·{' '}
+            {stats.shortlisted} in {programLabel} · {stats.highFit} high-fit pending ·{' '}
             {stats.sourced.toLocaleString()} sourced lifetime
           </p>
         </div>
@@ -298,7 +324,7 @@ function Hero({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard
           icon={<Trophy className="size-4" />}
-          label="Club Stanley"
+          label={programLabel}
           value={stats.shortlisted.toLocaleString()}
           hint={`${pickRate}% of sourced`}
           accent
@@ -359,7 +385,15 @@ function StatCard({
 
 // ─── Club Stanley shortlist section ───────────────────────────────────────
 
-function ShortlistSection({ rows }: { rows: DiscoverCandidate[] }) {
+function ShortlistSection({
+  rows,
+  programLabel,
+  shortlistPath,
+}: {
+  rows: DiscoverCandidate[]
+  programLabel: string
+  shortlistPath: string
+}) {
   const preview = [...rows]
     .sort((a, b) => (b.score_overall ?? 0) - (a.score_overall ?? 0))
     .slice(0, 4)
@@ -368,14 +402,14 @@ function ShortlistSection({ rows }: { rows: DiscoverCandidate[] }) {
       <div className="flex items-baseline justify-between">
         <div>
           <h2 className="font-display text-2xl text-paper">
-            Club Stanley shortlist
+            {programLabel} shortlist
           </h2>
           <p className="mt-1 font-mono text-[11px] text-paper-mute">
             {rows.length} creators picked for the cohort
           </p>
         </div>
         <a
-          href="/shortlist"
+          href={shortlistPath}
           className="font-mono text-xs text-lime hover:underline"
         >
           view cohort →
@@ -429,6 +463,7 @@ function PendingSection({
   onToggleShortlist,
   onRun,
   running,
+  programLabel,
 }: {
   rows: DiscoverCandidate[]
   allPending: DiscoverCandidate[]
@@ -439,6 +474,7 @@ function PendingSection({
   onToggleShortlist: (c: DiscoverCandidate) => void
   onRun: () => void
   running: boolean
+  programLabel: string
 }) {
   return (
     <section className="space-y-4">
@@ -459,13 +495,14 @@ function PendingSection({
         </a>
       </div>
 
-      {rows.length === 0 ? (
-        <EmptyPending
-          hasAnyPending={allPending.length > 0}
-          onRun={onRun}
-          running={running}
-        />
-      ) : (
+        {rows.length === 0 ? (
+          <EmptyPending
+            hasAnyPending={allPending.length > 0}
+            onRun={onRun}
+            running={running}
+            programLabel={programLabel}
+          />
+        ) : (
         <div className="overflow-x-auto rounded-sm border border-ink-3">
           <Table>
             <TableHeader>
@@ -563,8 +600,8 @@ function PendingSection({
                           )}
                           title={
                             c.is_shortlisted
-                              ? 'Remove from Club Stanley'
-                              : 'Shortlist for Club Stanley'
+                              ? `Remove from ${programLabel}`
+                              : `Shortlist for ${programLabel}`
                           }
                         >
                           {c.is_shortlisted ? (
@@ -625,11 +662,17 @@ function EmptyPending({
   hasAnyPending,
   onRun,
   running,
+  programLabel,
 }: {
   hasAnyPending: boolean
   onRun: () => void
   running: boolean
+  programLabel: string
 }) {
+  const description =
+    programLabel === 'Stanley Ambassadors'
+      ? 'The LLM sources real channel-operators whose audience actively asks for content frameworks (5K-100K followers, owned distribution beyond IG).'
+      : 'The LLM sources real, well-known social-media coaches that match your ICP (10K-100K followers, NORAM/UK/EMEA, talking-head content).'
   return (
     <div className="rounded-sm border border-dashed border-ink-3 px-8 py-12 text-center">
       <p className="smallcaps text-paper-mute">
@@ -640,10 +683,7 @@ function EmptyPending({
           ? 'Lower the bar or run more discovery passes.'
           : 'Run discovery to source your first cohort.'}
       </h3>
-      <p className="mt-2 max-w-md mx-auto text-sm text-paper-mute">
-        The LLM sources real, well-known social-media coaches that match your
-        ICP (10K–100K followers, NORAM/UK/EMEA, talking-head content).
-      </p>
+      <p className="mt-2 max-w-md mx-auto text-sm text-paper-mute">{description}</p>
       <Button
         type="button"
         onClick={onRun}
@@ -673,11 +713,13 @@ function CandidateDrawer({
   onApprove,
   onReject,
   onToggleShortlist,
+  programLabel,
 }: {
   candidate: DiscoverCandidate
   onApprove: () => void
   onReject: () => void
   onToggleShortlist: () => void
+  programLabel: string
 }) {
   const c = candidate
   return (
@@ -806,12 +848,12 @@ function CandidateDrawer({
           {c.is_shortlisted ? (
             <>
               <XCircle className="mr-1 size-4" />
-              Remove from Club Stanley
+              Remove from {programLabel}
             </>
           ) : (
             <>
               <Star className="mr-1 size-4" fill="currentColor" />
-              Shortlist for Club Stanley
+              Shortlist for {programLabel}
             </>
           )}
         </Button>
@@ -835,7 +877,7 @@ function CandidateDrawer({
           </Button>
         </div>
         <p className="text-[11px] text-paper-mute">
-          <span className="text-lime">Shortlist</span> picks the creator for the Club Stanley cohort dashboard. <span className="text-paper">Approve</span> kicks off the velocity-alerts pipeline.
+          <span className="text-lime">Shortlist</span> picks the creator for the {programLabel} cohort dashboard. <span className="text-paper">Approve</span> kicks off the velocity-alerts pipeline.
         </p>
       </section>
     </div>

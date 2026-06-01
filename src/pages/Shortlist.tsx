@@ -1,15 +1,15 @@
 /**
- * Club Stanley shortlist — every candidate a reviewer hand-picked for the
- * cohort.
+ * Shortlist — every candidate a reviewer hand-picked for the cohort.
+ * Parameterized by program (Club Stanley or Stanley Ambassadors).
  *
  * Distinct from /tracked (which is the velocity-alerts pipeline). Shortlist is
- * the editorial decision: "this creator is who we want in Club Stanley". You
- * can shortlist someone whether or not they're tracked, and you can untrack
+ * the editorial decision: "this creator belongs in the cohort". You can
+ * shortlist someone whether or not they're tracked, and you can untrack
  * someone you've already shortlisted without losing the pick.
  *
  * Data flow: GET /discover/candidates?shortlisted=true&status=all — backed by
- * the new is_shortlisted column on CreatorCandidate. The Discover and main
- * Dashboard pages let you toggle individual candidates in/out of this list.
+ * the is_shortlisted column on CreatorCandidate. The Discover pages let you
+ * toggle individual candidates in/out of this list.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { NavLink } from 'react-router-dom'
@@ -35,12 +35,23 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { discoverApi, type DiscoverCandidate } from '@/lib/discoverApi'
+import {
+  PROGRAMS,
+  createDiscoverApi,
+  type DiscoverCandidate,
+  type Program,
+} from '@/lib/discoverApi'
 import { cn } from '@/lib/utils'
 
 const TARGET_COHORT_SIZE = 25 // editorial target — used for the progress bar.
 
-export default function ShortlistPage() {
+type ShortlistProps = { program?: Program }
+
+export default function ShortlistPage({ program = 'club_stanley' }: ShortlistProps) {
+  const api = useMemo(() => createDiscoverApi(program), [program])
+  const programInfo = PROGRAMS[program]
+  const discoverPath = program === 'club_stanley' ? '/' : `/${programInfo.slug}`
+
   const [rows, setRows] = useState<DiscoverCandidate[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
@@ -49,9 +60,9 @@ export default function ShortlistPage() {
   const load = useCallback(async () => {
     try {
       const [shortlisted, allSourced] = await Promise.all([
-        discoverApi.listShortlist(500),
+        api.listShortlist(500),
         // Lifetime sourced — used for the "X of Y" conversion KPI.
-        discoverApi.listCandidates({ status: 'all', minScore: 0, limit: 2000 }),
+        api.listCandidates({ status: 'all', minScore: 0, limit: 2000 }),
       ])
       setRows(shortlisted)
       setSourcedTotal(allSourced.length)
@@ -61,7 +72,7 @@ export default function ShortlistPage() {
       setSourcedTotal(0)
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [])
+  }, [api])
 
   useEffect(() => {
     void load()
@@ -77,8 +88,8 @@ export default function ShortlistPage() {
     const prev = rows
     setRows((r) => r?.filter((x) => x.id !== c.id) ?? null)
     try {
-      await discoverApi.unshortlist(c.id)
-      toast.success(`Removed @${c.handle} from Club Stanley.`)
+      await api.unshortlist(c.id)
+      toast.success(`Removed @${c.handle} from ${programInfo.label}.`)
     } catch (e) {
       setRows(prev)
       toast.error(`Couldn't remove: ${e instanceof Error ? e.message : String(e)}`)
@@ -132,6 +143,8 @@ export default function ShortlistPage() {
           sourced={sourcedTotal ?? 0}
           refreshing={refreshing}
           onRefresh={refresh}
+          programLabel={programInfo.label}
+          discoverPath={discoverPath}
         />
 
         {stats && (
@@ -148,7 +161,7 @@ export default function ShortlistPage() {
             <Loader2 className="size-5 animate-spin text-paper-mute" />
           </div>
         ) : rows.length === 0 ? (
-          <EmptyState />
+          <EmptyState discoverPath={discoverPath} programLabel={programInfo.label} />
         ) : (
           <ShortlistTable rows={rows} onRemove={remove} />
         )}
@@ -164,22 +177,26 @@ function Header({
   sourced,
   refreshing,
   onRefresh,
+  programLabel,
+  discoverPath,
 }: {
   count: number
   sourced: number
   refreshing: boolean
   onRefresh: () => void
+  programLabel: string
+  discoverPath: string
 }) {
   const conv = sourced > 0 ? ((count / sourced) * 100).toFixed(1) : '0.0'
   return (
     <header className="space-y-4 border-b border-ink-3 pb-6">
       <div className="flex items-center justify-between gap-4">
         <nav className="flex items-center gap-1 font-mono text-xs text-paper-mute">
-          <NavLink to="/" className="hover:text-paper">
+          <NavLink to={discoverPath} className="hover:text-paper">
             Discover
           </NavLink>
           <span>/</span>
-          <span className="text-paper">Club Stanley</span>
+          <span className="text-paper">{programLabel}</span>
         </nav>
         <Button
           type="button"
@@ -206,7 +223,7 @@ function Header({
         <div className="space-y-2">
           <p className="smallcaps text-paper-mute">Editorial picks</p>
           <h1 className="font-display text-4xl text-paper sm:text-5xl">
-            Club Stanley cohort.
+            {programLabel} cohort.
           </h1>
           <p className="font-mono text-xs text-paper-mute">
             {count.toLocaleString()} shortlisted ·{' '}
@@ -214,7 +231,7 @@ function Header({
             <span className="text-lime">{conv}%</span> conversion
           </p>
         </div>
-        <NavLink to="/">
+        <NavLink to={discoverPath}>
           <Button
             type="button"
             className="smallcaps bg-lime text-lime-ink hover:bg-lime/90"
@@ -466,7 +483,7 @@ function ShortlistTable({
                   size="sm"
                   onClick={() => onRemove(c)}
                   className="smallcaps text-paper-mute hover:bg-danger/10 hover:text-danger"
-                  title="Remove from Club Stanley"
+                  title="Remove from cohort"
                 >
                   <XCircle className="mr-1 size-3" />
                   Remove
@@ -482,13 +499,19 @@ function ShortlistTable({
 
 // ─── Empty / error states ─────────────────────────────────────────────────
 
-function EmptyState() {
+function EmptyState({
+  discoverPath,
+  programLabel,
+}: {
+  discoverPath: string
+  programLabel: string
+}) {
   return (
     <div className="rounded-sm border border-dashed border-ink-3 px-8 py-16 text-center">
       <Trophy className="mx-auto size-8 text-paper-mute" />
       <p className="smallcaps mt-4 text-paper-mute">No picks yet</p>
       <h2 className="mt-3 font-display text-3xl text-paper">
-        Build out the Club Stanley cohort.
+        Build out the {programLabel} cohort.
       </h2>
       <p className="mt-2 max-w-md mx-auto text-sm text-paper-mute">
         Head to the dashboard or Discover, browse sourced creators, and hit
@@ -496,10 +519,10 @@ function EmptyState() {
           <Star className="size-2.5" />
           Shortlist
         </span>
-        on the ones who belong in Club Stanley.
+        on the ones who belong in {programLabel}.
       </p>
       <div className="mt-6 flex justify-center">
-        <NavLink to="/">
+        <NavLink to={discoverPath}>
           <Button
             type="button"
             className="smallcaps bg-lime text-lime-ink hover:bg-lime/90"
