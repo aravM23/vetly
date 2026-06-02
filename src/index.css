@@ -6,38 +6,44 @@
 
 @layer base {
   :root {
-    /* Vetly editorial tokens */
-    --ink: #0F0F0E;
-    --ink-2: #18181A;
-    --ink-3: #232326;
-    --paper: #F5F1E8;
-    --paper-mute: #A8A39A;
-    --lime: #D4F04A;
-    --lime-ink: #0F0F0E;
-    --danger: #FF6B5C;
-    --success: #6BD9A0;
+    /*
+     * Stanley palette — deep purple-black canvas, violet accent.
+     * Matches getstanley.ai's dark mode (#141028 canvas).
+     *
+     * Token names are kept historical ("lime" / "lime-ink") to avoid a
+     * sweeping rename across every component; the VALUES are Stanley violet.
+     */
+    --ink: #141028;          /* canvas (Stanley dark) */
+    --ink-2: #1E1840;        /* card surface */
+    --ink-3: #2D2659;        /* borders + dividers */
+    --paper: #FFFFFF;        /* primary text */
+    --paper-mute: #9D90DB;   /* secondary text (light lavender) */
+    --lime: #A78BFA;         /* accent — Stanley violet */
+    --lime-ink: #141028;     /* text on violet button */
+    --danger: #FF6B7A;
+    --success: #6BE3B5;
 
     /* shadcn aliases (HSL triplets, no wrapper) */
-    --background: 60 3% 6%;
-    --foreground: 42 36% 94%;
-    --card: 240 4% 10%;
-    --card-foreground: 42 36% 94%;
-    --popover: 240 4% 10%;
-    --popover-foreground: 42 36% 94%;
-    --primary: 71 85% 62%;
-    --primary-foreground: 60 3% 6%;
-    --secondary: 240 4% 10%;
-    --secondary-foreground: 42 36% 94%;
-    --muted: 240 4% 10%;
-    --muted-foreground: 39 8% 63%;
-    --accent: 240 4% 14%;
-    --accent-foreground: 42 36% 94%;
-    --destructive: 5 100% 68%;
-    --destructive-foreground: 60 3% 6%;
-    --border: 240 4% 14%;
-    --input: 240 4% 14%;
-    --ring: 71 85% 62%;
-    --radius: 4px;
+    --background: 248 43% 11%;       /* #141028 */
+    --foreground: 0 0% 100%;
+    --card: 248 45% 17%;             /* #1E1840 */
+    --card-foreground: 0 0% 100%;
+    --popover: 248 45% 17%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 255 92% 76%;          /* #A78BFA */
+    --primary-foreground: 248 43% 11%;
+    --secondary: 248 45% 17%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 248 45% 17%;
+    --muted-foreground: 249 51% 71%;
+    --accent: 248 41% 25%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 352 100% 71%;
+    --destructive-foreground: 248 43% 11%;
+    --border: 248 41% 25%;
+    --input: 248 41% 25%;
+    --ring: 255 92% 76%;
+    --radius: 10px;
   }
 
   * {
@@ -57,33 +63,49 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    background-image:
+      radial-gradient(ellipse at top, rgba(167, 139, 250, 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse at bottom right, rgba(167, 139, 250, 0.04) 0%, transparent 60%);
+    background-attachment: fixed;
   }
 
-  /* Editorial display family for headlines */
   .font-display {
     font-family: 'Instrument Serif', Georgia, serif;
     font-weight: 400;
     letter-spacing: -0.01em;
   }
 
-  /* Tabular numerics applied wherever JetBrains Mono is used */
   .font-mono {
     font-feature-settings: 'tnum', 'zero', 'ss01';
   }
 }
 
 @layer components {
-  /* Score badge: lime fill, ink text, JetBrains Mono, square corners */
+  /* Score badge: violet fill, dark text */
   .score-badge {
     @apply inline-flex items-center justify-center;
     @apply bg-lime text-lime-ink;
     @apply font-mono font-medium tabular-nums;
     @apply px-2 h-6 text-xs leading-none;
-    border-radius: 4px;
+    border-radius: 6px;
   }
 
-  /* Small caps tracking utility for primary CTAs */
   .smallcaps {
     @apply uppercase tracking-caps text-[11px] font-semibold;
+  }
+
+  /* Soft violet glow used on hero + run button */
+  .glow-violet {
+    box-shadow:
+      0 0 0 1px rgba(167, 139, 250, 0.25),
+      0 10px 40px -10px rgba(167, 139, 250, 0.4);
+  }
+
+  /* Card surface helper — slightly translucent over the canvas gradient */
+  .surface {
+    background-color: rgba(30, 24, 64, 0.7); /* var(--ink-2) at 70% */
+    border: 1px solid var(--ink-3);
+    backdrop-filter: blur(6px);
+    border-radius: var(--radius);
   }
 }

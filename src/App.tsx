@@ -1,34 +1,27 @@
 /**
- * Four routes, two programs, no auth.
+ * Two routes, two programs, no auth.
  *
- * Club Stanley (incubator for emerging social-media coaches):
- *   /                       → Discover candidates
- *   /shortlist              → Club Stanley cohort
+ *   /              → Club Stanley (incubator sourcing)
+ *   /partnerships  → Stanley Partnerships (Ambassador sourcing)
  *
- * Stanley Ambassadors (channel-operator program):
- *   /ambassadors            → Discover candidates
- *   /ambassadors/shortlist  → Ambassador cohort
- *
- * Each program is its own user_id on the backend (1 = Club Stanley,
- * 2 = Ambassadors) with its own DiscoverySettings (ICP, hashtag seeds,
- * follower range) and its own LLM prompt set.
+ * Both routes render the same ProgramPage component with a different
+ * `program` prop. The backend uses user_id=1 for Club Stanley and
+ * user_id=2 for Partnerships; each has its own DiscoverySettings,
+ * ICP, and prompt set.
  */
 import { Route, Routes } from 'react-router-dom'
 import { AppHeader } from '@/components/AppHeader'
-import DiscoverPage from '@/pages/Dashboard'
-import ShortlistPage from '@/pages/Shortlist'
+import ProgramPage from '@/pages/ProgramPage'
 
 export default function App() {
   return (
     <div className="min-h-screen">
       <AppHeader />
       <Routes>
-        <Route path="/" element={<DiscoverPage program="club_stanley" />} />
-        <Route path="/shortlist" element={<ShortlistPage program="club_stanley" />} />
-        <Route path="/ambassadors" element={<DiscoverPage program="ambassador" />} />
+        <Route path="/" element={<ProgramPage program="club_stanley" />} />
         <Route
-          path="/ambassadors/shortlist"
-          element={<ShortlistPage program="ambassador" />}
+          path="/partnerships"
+          element={<ProgramPage program="ambassador" />}
         />
         <Route path="*" element={<NotFound />} />
       </Routes>
