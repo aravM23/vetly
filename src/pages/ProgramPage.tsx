@@ -339,32 +339,32 @@ function Hero({
   onRun: () => void
 }) {
   return (
-    <section className="relative overflow-hidden rounded-[14px] border border-ink-3 bg-gradient-to-br from-ink-2 via-ink to-ink p-6 sm:p-10">
+    <section className="relative overflow-hidden rounded-[20px] border border-ink-3 bg-gradient-to-br from-ink-2 via-ink to-ink p-6 sm:p-12">
       {/* glow blobs */}
       <div
         aria-hidden
-        className="pointer-events-none absolute -right-32 -top-32 size-96 rounded-full bg-lime/20 blur-3xl"
+        className="pointer-events-none absolute -right-32 -top-32 size-96 rounded-full bg-lime/25 blur-[100px]"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -left-24 bottom-0 size-72 rounded-full bg-lime/10 blur-3xl"
+        className="pointer-events-none absolute -left-24 bottom-0 size-72 rounded-full bg-lime/12 blur-[100px]"
       />
 
       <div className="relative grid grid-cols-1 gap-6 sm:grid-cols-[1fr_auto] sm:items-center">
-        <div className="space-y-4">
+        <div className="space-y-5">
           <p className="smallcaps text-paper-mute">{copy.eyebrow}</p>
-          <h1 className="font-display text-4xl leading-tight text-paper sm:text-5xl">
+          <h1 className="font-display text-5xl leading-[1.05] text-paper sm:text-6xl">
             {copy.title}
           </h1>
-          <p className="max-w-xl text-sm leading-relaxed text-paper-mute sm:text-base">
+          <p className="max-w-xl text-base leading-relaxed text-paper-mute sm:text-lg">
             {copy.tagline}
           </p>
-          <div>
+          <div className="pt-2">
             <Button
               type="button"
               onClick={onRun}
               disabled={running}
-              className="smallcaps glow-violet h-11 bg-lime px-5 text-lime-ink hover:bg-lime/90"
+              className="smallcaps glow-violet pill h-12 bg-lime px-7 text-base font-bold text-lime-ink hover:bg-lime/90"
             >
               {running ? (
                 <>
@@ -419,12 +419,12 @@ function Mascot() {
     <div className="relative">
       <div
         aria-hidden
-        className="absolute inset-0 -z-10 rounded-full bg-lime/30 blur-2xl"
+        className="absolute inset-0 -z-10 rounded-full bg-lime/35 blur-[60px]"
       />
       <img
         src="/stanley-mascot.png"
         alt="Stanley"
-        className="size-44 object-contain drop-shadow-[0_10px_40px_rgba(167,139,250,0.4)]"
+        className="size-56 object-contain drop-shadow-[0_20px_60px_rgba(167,139,250,0.5)]"
       />
     </div>
   )
@@ -484,7 +484,7 @@ function TabBar({
     { id: 'all', label: 'All sourced', count: counts.all },
   ]
   return (
-    <div className="inline-flex rounded-[10px] border border-ink-3 bg-ink-2/60 p-1 backdrop-blur-sm">
+    <div className="inline-flex rounded-full border border-ink-3 bg-ink-2/60 p-1 backdrop-blur-sm">
       {items.map((it) => {
         const active = it.id === tab
         return (
@@ -493,7 +493,7 @@ function TabBar({
             type="button"
             onClick={() => onChange(it.id)}
             className={cn(
-              'smallcaps inline-flex items-center gap-2 rounded-[6px] px-3 py-1.5 transition',
+              'inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold transition',
               active
                 ? 'bg-lime text-lime-ink'
                 : 'text-paper-mute hover:text-paper'
@@ -503,7 +503,7 @@ function TabBar({
             <span
               className={cn(
                 'font-mono text-[10px] tabular-nums',
-                active ? 'text-lime-ink/70' : 'text-paper-mute'
+                active ? 'text-lime-ink/60' : 'text-paper-mute/70'
               )}
             >
               {it.count}
@@ -751,7 +751,7 @@ function Empty({
         type="button"
         onClick={onRun}
         disabled={running}
-        className="smallcaps glow-violet mt-6 bg-lime text-lime-ink hover:bg-lime/90"
+        className="smallcaps glow-violet pill mt-6 h-12 bg-lime px-7 text-base font-bold text-lime-ink hover:bg-lime/90"
       >
         {running ? (
           <>
@@ -893,7 +893,7 @@ function CandidateDrawer({
           type="button"
           onClick={onToggleShortlist}
           className={cn(
-            'smallcaps w-full',
+            'smallcaps pill h-11 w-full text-sm font-bold',
             c.is_shortlisted
               ? 'border border-lime/40 bg-ink-2 text-lime hover:bg-ink-3'
               : 'glow-violet bg-lime text-lime-ink hover:bg-lime/90'
@@ -915,7 +915,7 @@ function CandidateDrawer({
           <Button
             type="button"
             onClick={onApprove}
-            className="smallcaps bg-success text-ink hover:bg-success/90"
+            className="pill h-10 bg-success font-bold text-ink hover:bg-success/90"
           >
             <CheckCircle2 className="mr-1 size-4" />
             Approve
@@ -924,13 +924,13 @@ function CandidateDrawer({
             type="button"
             onClick={onReject}
             variant="outline"
-            className="smallcaps border-ink-3"
+            className="pill h-10 border-ink-3 font-semibold"
           >
             <XCircle className="mr-1 size-4" />
             Reject
           </Button>
         </div>
-        <p className="text-[11px] text-paper-mute">
+        <p className="pt-1 text-[11px] text-paper-mute">
           <span className="text-lime">Shortlist</span> picks the creator for the {programLabel} cohort. <span className="text-paper">Approve</span> kicks off the velocity-alerts pipeline.
         </p>
       </section>

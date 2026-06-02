@@ -1,4 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+/*
+ * Stanley aesthetic — matched to getstanley.ai (Plus Jakarta Sans + Fraunces,
+ * pill buttons, deep black canvas with violet accents).
+ *
+ * Canvas is pure #000 to match the Stanley mascot illustration's background.
+ * Surfaces are very-dark violet-tinted blacks for subtle elevation.
+ */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -7,43 +14,40 @@
 @layer base {
   :root {
     /*
-     * Stanley palette — deep purple-black canvas, violet accent.
-     * Matches getstanley.ai's dark mode (#141028 canvas).
-     *
-     * Token names are kept historical ("lime" / "lime-ink") to avoid a
-     * sweeping rename across every component; the VALUES are Stanley violet.
+     * Stanley palette. Token names kept historical ("lime" / "lime-ink") to
+     * avoid a sweeping rename — the values are Stanley violet on pure black.
      */
-    --ink: #141028;          /* canvas (Stanley dark) */
-    --ink-2: #1E1840;        /* card surface */
-    --ink-3: #2D2659;        /* borders + dividers */
+    --ink: #000000;          /* canvas — matches the mascot illustration bg */
+    --ink-2: #0B0817;        /* card surface (lifted +1) */
+    --ink-3: #1B1538;        /* borders + dividers */
     --paper: #FFFFFF;        /* primary text */
-    --paper-mute: #9D90DB;   /* secondary text (light lavender) */
+    --paper-mute: #A096D9;   /* secondary text — light lavender */
     --lime: #A78BFA;         /* accent — Stanley violet */
-    --lime-ink: #141028;     /* text on violet button */
+    --lime-ink: #0B0817;     /* text on violet button */
     --danger: #FF6B7A;
     --success: #6BE3B5;
 
-    /* shadcn aliases (HSL triplets, no wrapper) */
-    --background: 248 43% 11%;       /* #141028 */
+    /* shadcn aliases (HSL triplets) */
+    --background: 0 0% 0%;
     --foreground: 0 0% 100%;
-    --card: 248 45% 17%;             /* #1E1840 */
+    --card: 252 47% 6%;
     --card-foreground: 0 0% 100%;
-    --popover: 248 45% 17%;
+    --popover: 252 47% 6%;
     --popover-foreground: 0 0% 100%;
-    --primary: 255 92% 76%;          /* #A78BFA */
-    --primary-foreground: 248 43% 11%;
-    --secondary: 248 45% 17%;
+    --primary: 255 92% 76%;
+    --primary-foreground: 252 47% 6%;
+    --secondary: 252 47% 6%;
     --secondary-foreground: 0 0% 100%;
-    --muted: 248 45% 17%;
-    --muted-foreground: 249 51% 71%;
-    --accent: 248 41% 25%;
+    --muted: 252 47% 6%;
+    --muted-foreground: 252 50% 72%;
+    --accent: 250 43% 16%;
     --accent-foreground: 0 0% 100%;
     --destructive: 352 100% 71%;
-    --destructive-foreground: 248 43% 11%;
-    --border: 248 41% 25%;
-    --input: 248 41% 25%;
+    --destructive-foreground: 252 47% 6%;
+    --border: 250 43% 16%;
+    --input: 250 43% 16%;
     --ring: 255 92% 76%;
-    --radius: 10px;
+    --radius: 12px;
   }
 
   * {
@@ -58,54 +62,68 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
-    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+    font-feature-settings: 'ss01';
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    background-color: #000000;
     background-image:
-      radial-gradient(ellipse at top, rgba(167, 139, 250, 0.08) 0%, transparent 50%),
-      radial-gradient(ellipse at bottom right, rgba(167, 139, 250, 0.04) 0%, transparent 60%);
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(167, 139, 250, 0.18) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 100% 100%, rgba(167, 139, 250, 0.06) 0%, transparent 60%);
     background-attachment: fixed;
+    background-repeat: no-repeat;
   }
 
+  /* Display: Fraunces, the variable serif Stanley uses on hero copy */
   .font-display {
-    font-family: 'Instrument Serif', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-weight: 400;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.025em;
+    font-optical-sizing: auto;
   }
 
+  /* Tabular numerics — only used on score badges + counts now */
   .font-mono {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-feature-settings: 'tnum', 'zero', 'ss01';
   }
 }
 
 @layer components {
-  /* Score badge: violet fill, dark text */
+  /* Score badge: violet fill, dark text, pill */
   .score-badge {
     @apply inline-flex items-center justify-center;
     @apply bg-lime text-lime-ink;
-    @apply font-mono font-medium tabular-nums;
-    @apply px-2 h-6 text-xs leading-none;
-    border-radius: 6px;
+    @apply font-mono font-semibold tabular-nums;
+    @apply px-2.5 h-6 text-xs leading-none;
+    border-radius: 999px;
   }
 
+  /* Soft tracking label — replaces the heavy editorial smallcaps */
   .smallcaps {
-    @apply uppercase tracking-caps text-[11px] font-semibold;
+    @apply uppercase font-semibold;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+  }
+
+  /* Primary pill CTA — matches getstanley.ai's button shape */
+  .pill {
+    border-radius: 999px;
   }
 
   /* Soft violet glow used on hero + run button */
   .glow-violet {
     box-shadow:
-      0 0 0 1px rgba(167, 139, 250, 0.25),
-      0 10px 40px -10px rgba(167, 139, 250, 0.4);
+      0 0 0 1px rgba(167, 139, 250, 0.18),
+      0 12px 48px -10px rgba(167, 139, 250, 0.5);
   }
 
   /* Card surface helper — slightly translucent over the canvas gradient */
   .surface {
-    background-color: rgba(30, 24, 64, 0.7); /* var(--ink-2) at 70% */
+    background-color: rgba(11, 8, 23, 0.72); /* var(--ink-2) at 72% */
     border: 1px solid var(--ink-3);
-    backdrop-filter: blur(6px);
+    backdrop-filter: blur(8px);
     border-radius: var(--radius);
   }
 }
