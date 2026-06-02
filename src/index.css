@@ -1,11 +1,13 @@
 /*
- * Stanley aesthetic — matched to getstanley.ai (Plus Jakarta Sans + Fraunces,
- * pill buttons, deep black canvas with violet accents).
+ * Stanley aesthetic — matched to one.getstanley.ai (their actual app).
  *
- * Canvas is pure #000 to match the Stanley mascot illustration's background.
- * Surfaces are very-dark violet-tinted blacks for subtle elevation.
+ *   - Pure #000 canvas like the mascot illustration
+ *   - True Stanley brand violet #6355FF (more vivid than Tailwind violet)
+ *   - System sans-serif stack (their app uses ui-sans-serif, no fancy fonts)
+ *   - Subtle grain texture + a single bottom radial brand glow
+ *   - Pill buttons, full-radius accents
  */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -14,18 +16,18 @@
 @layer base {
   :root {
     /*
-     * Stanley palette. Token names kept historical ("lime" / "lime-ink") to
+     * Stanley palette. Token names are kept historical (lime / lime-ink) to
      * avoid a sweeping rename — the values are Stanley violet on pure black.
      */
-    --ink: #000000;          /* canvas — matches the mascot illustration bg */
-    --ink-2: #0B0817;        /* card surface (lifted +1) */
-    --ink-3: #1B1538;        /* borders + dividers */
-    --paper: #FFFFFF;        /* primary text */
-    --paper-mute: #A096D9;   /* secondary text — light lavender */
-    --lime: #A78BFA;         /* accent — Stanley violet */
-    --lime-ink: #0B0817;     /* text on violet button */
+    --ink: #000000;
+    --ink-2: #0A0814;        /* card surface — barely-elevated black */
+    --ink-3: #1A1438;        /* borders + dividers — violet-tinted */
+    --paper: #FFFFFF;
+    --paper-mute: #8B86A8;   /* secondary text — muted lavender-grey */
+    --lime: #6355FF;         /* Stanley brand violet (rgb 99 85 255) */
+    --lime-ink: #FFFFFF;     /* text on the brand button */
     --danger: #FF6B7A;
-    --success: #6BE3B5;
+    --success: #5CE3B0;
 
     /* shadcn aliases (HSL triplets) */
     --background: 0 0% 0%;
@@ -34,19 +36,19 @@
     --card-foreground: 0 0% 100%;
     --popover: 252 47% 6%;
     --popover-foreground: 0 0% 100%;
-    --primary: 255 92% 76%;
-    --primary-foreground: 252 47% 6%;
+    --primary: 247 100% 67%;
+    --primary-foreground: 0 0% 100%;
     --secondary: 252 47% 6%;
     --secondary-foreground: 0 0% 100%;
     --muted: 252 47% 6%;
-    --muted-foreground: 252 50% 72%;
-    --accent: 250 43% 16%;
+    --muted-foreground: 248 17% 60%;
+    --accent: 250 47% 14%;
     --accent-foreground: 0 0% 100%;
     --destructive: 352 100% 71%;
-    --destructive-foreground: 252 47% 6%;
-    --border: 250 43% 16%;
-    --input: 250 43% 16%;
-    --ring: 255 92% 76%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 250 47% 14%;
+    --input: 250 47% 14%;
+    --ring: 247 100% 67%;
     --radius: 12px;
   }
 
@@ -60,38 +62,74 @@
     min-height: 100vh;
   }
 
+  /*
+   * System font stack — same as one.getstanley.ai uses for their app body.
+   * No Plus Jakarta Sans, no Fraunces. Simpler.
+   */
   body {
     @apply bg-background text-foreground;
-    font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
-    font-feature-settings: 'ss01';
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+      'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     background-color: #000000;
+    position: relative;
+  }
+
+  /* Single bottom-center radial brand glow — Stanley signature */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: auto 0 -40% 0;
+    height: 100%;
+    background: radial-gradient(
+      55% 60% at 50% 90%,
+      rgba(99, 85, 255, 0.18) 0%,
+      rgba(99, 85, 255, 0.05) 40%,
+      transparent 70%
+    );
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Subtle grain texture from one.getstanley.ai */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
     background-image:
-      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(167, 139, 250, 0.18) 0%, transparent 60%),
-      radial-gradient(ellipse 60% 40% at 100% 100%, rgba(167, 139, 250, 0.06) 0%, transparent 60%);
-    background-attachment: fixed;
-    background-repeat: no-repeat;
+      radial-gradient(rgba(255, 255, 255, 0.6) 1px, transparent 1px),
+      radial-gradient(rgba(255, 255, 255, 0.4) 1px, transparent 1px);
+    background-position: 0 0, 1px 2px;
+    background-size: 3px 3px, 7px 7px;
+    opacity: 0.04;
+    mix-blend-mode: overlay;
+    pointer-events: none;
+    z-index: 0;
   }
 
-  /* Display: Fraunces, the variable serif Stanley uses on hero copy */
+  #root {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Display headings — same family as body, just heavier weight */
   .font-display {
-    font-family: 'Fraunces', Georgia, serif;
-    font-weight: 400;
-    letter-spacing: -0.025em;
-    font-optical-sizing: auto;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+      'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.02em;
   }
 
-  /* Tabular numerics — only used on score badges + counts now */
   .font-mono {
     font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-feature-settings: 'tnum', 'zero', 'ss01';
+    font-feature-settings: 'tnum', 'zero';
   }
 }
 
 @layer components {
-  /* Score badge: violet fill, dark text, pill */
+  /* Score badge: pill, brand violet, white text */
   .score-badge {
     @apply inline-flex items-center justify-center;
     @apply bg-lime text-lime-ink;
@@ -100,30 +138,22 @@
     border-radius: 999px;
   }
 
-  /* Soft tracking label — replaces the heavy editorial smallcaps */
+  /* Soft uppercase label */
   .smallcaps {
     @apply uppercase font-semibold;
     font-size: 11px;
     letter-spacing: 0.06em;
   }
 
-  /* Primary pill CTA — matches getstanley.ai's button shape */
+  /* Pill helper */
   .pill {
     border-radius: 999px;
   }
 
-  /* Soft violet glow used on hero + run button */
-  .glow-violet {
-    box-shadow:
-      0 0 0 1px rgba(167, 139, 250, 0.18),
-      0 12px 48px -10px rgba(167, 139, 250, 0.5);
-  }
-
-  /* Card surface helper — slightly translucent over the canvas gradient */
+  /* Card surface — solid, slightly violet-tinted black */
   .surface {
-    background-color: rgba(11, 8, 23, 0.72); /* var(--ink-2) at 72% */
+    background-color: var(--ink-2);
     border: 1px solid var(--ink-3);
-    backdrop-filter: blur(8px);
     border-radius: var(--radius);
   }
 }

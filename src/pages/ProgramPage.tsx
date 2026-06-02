@@ -255,8 +255,8 @@ export default function ProgramPage({ program }: ProgramPageProps) {
   }
 
   return (
-    <main className="px-6 py-10 sm:px-10 sm:py-12">
-      <div className="mx-auto max-w-6xl space-y-10">
+    <main className="px-6 py-10 sm:px-10 sm:py-14">
+      <div className="mx-auto max-w-6xl space-y-8">
         {error && (
           <div className="rounded-[10px] border border-danger/40 bg-danger/[0.06] px-4 py-3">
             <p className="smallcaps text-danger">Couldn't refresh</p>
@@ -264,7 +264,9 @@ export default function ProgramPage({ program }: ProgramPageProps) {
           </div>
         )}
 
-        <Hero copy={copy} stats={stats} running={running} onRun={runDiscovery} />
+        <PageHead copy={copy} running={running} onRun={runDiscovery} />
+
+        <KpiStrip stats={stats} />
 
         <TabBar
           tab={tab}
@@ -319,15 +321,55 @@ export default function ProgramPage({ program }: ProgramPageProps) {
   )
 }
 
-// ─── Hero ──────────────────────────────────────────────────────────────────
+// ─── Page head ─────────────────────────────────────────────────────────────
 
-function Hero({
+function PageHead({
   copy,
-  stats,
   running,
   onRun,
 }: {
   copy: { eyebrow: string; title: string; tagline: string }
+  running: boolean
+  onRun: () => void
+}) {
+  return (
+    <header className="flex flex-col items-start justify-between gap-6 border-b border-ink-3 pb-8 sm:flex-row sm:items-end">
+      <div className="space-y-3">
+        <p className="smallcaps text-paper-mute">{copy.eyebrow}</p>
+        <h1 className="font-display text-3xl leading-tight text-paper sm:text-4xl">
+          {copy.title}
+        </h1>
+        <p className="max-w-2xl text-sm leading-relaxed text-paper-mute sm:text-base">
+          {copy.tagline}
+        </p>
+      </div>
+      <Button
+        type="button"
+        onClick={onRun}
+        disabled={running}
+        className="pill h-11 shrink-0 bg-lime px-6 text-sm font-bold text-lime-ink hover:bg-lime/90"
+      >
+        {running ? (
+          <>
+            <Loader2 className="mr-2 size-4 animate-spin" />
+            Sourcing
+          </>
+        ) : (
+          <>
+            <Sparkles className="mr-2 size-4" />
+            Run discovery
+          </>
+        )}
+      </Button>
+    </header>
+  )
+}
+
+// ─── KPI strip ─────────────────────────────────────────────────────────────
+
+function KpiStrip({
+  stats,
+}: {
   stats: {
     cohortCount: number
     pendingCount: number
@@ -335,109 +377,27 @@ function Hero({
     sourced: number
     pickRate: number
   }
-  running: boolean
-  onRun: () => void
 }) {
   return (
-    <section className="relative overflow-hidden rounded-[20px] border border-ink-3 bg-gradient-to-br from-ink-2 via-ink to-ink p-6 sm:p-12">
-      {/* glow blobs */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -right-32 -top-32 size-96 rounded-full bg-lime/25 blur-[100px]"
+    <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <Kpi label="In cohort" value={stats.cohortCount} accent />
+      <Kpi label="High fit ≥ 80" value={stats.highFit} />
+      <Kpi label="Pending review" value={stats.pendingCount} />
+      <Kpi
+        label="Pick rate"
+        value={`${stats.pickRate.toFixed(1)}%`}
+        hint={`${stats.cohortCount} of ${stats.sourced.toLocaleString()}`}
       />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -left-24 bottom-0 size-72 rounded-full bg-lime/12 blur-[100px]"
-      />
-
-      <div className="relative grid grid-cols-1 gap-6 sm:grid-cols-[1fr_auto] sm:items-center">
-        <div className="space-y-5">
-          <p className="smallcaps text-paper-mute">{copy.eyebrow}</p>
-          <h1 className="font-display text-5xl leading-[1.05] text-paper sm:text-6xl">
-            {copy.title}
-          </h1>
-          <p className="max-w-xl text-base leading-relaxed text-paper-mute sm:text-lg">
-            {copy.tagline}
-          </p>
-          <div className="pt-2">
-            <Button
-              type="button"
-              onClick={onRun}
-              disabled={running}
-              className="smallcaps glow-violet pill h-12 bg-lime px-7 text-base font-bold text-lime-ink hover:bg-lime/90"
-            >
-              {running ? (
-                <>
-                  <Loader2 className="mr-2 size-4 animate-spin" />
-                  Sourcing
-                </>
-              ) : (
-                <>
-                  <Sparkles className="mr-2 size-4" />
-                  Run discovery
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-
-        <div className="hidden sm:block">
-          <Mascot />
-        </div>
-      </div>
-
-      <div className="relative mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Kpi
-          icon={<Trophy className="size-4" />}
-          label="In cohort"
-          value={stats.cohortCount}
-          accent
-        />
-        <Kpi
-          icon={<Star className="size-4" />}
-          label="High fit ≥ 80"
-          value={stats.highFit}
-        />
-        <Kpi
-          icon={<Sparkles className="size-4" />}
-          label="Pending"
-          value={stats.pendingCount}
-        />
-        <Kpi
-          icon={<Globe2 className="size-4" />}
-          label="Pick rate"
-          value={`${stats.pickRate.toFixed(1)}%`}
-          hint={`${stats.cohortCount} of ${stats.sourced.toLocaleString()}`}
-        />
-      </div>
     </section>
   )
 }
 
-function Mascot() {
-  return (
-    <div className="relative">
-      <div
-        aria-hidden
-        className="absolute inset-0 -z-10 rounded-full bg-lime/35 blur-[60px]"
-      />
-      <img
-        src="/stanley-mascot.png"
-        alt="Stanley"
-        className="size-56 object-contain drop-shadow-[0_20px_60px_rgba(167,139,250,0.5)]"
-      />
-    </div>
-  )
-}
-
 function Kpi({
-  icon,
   label,
   value,
   hint,
   accent,
 }: {
-  icon: React.ReactNode
   label: string
   value: number | string
   hint?: string
@@ -446,23 +406,20 @@ function Kpi({
   return (
     <div
       className={cn(
-        'rounded-[10px] border bg-ink-2/60 p-4 backdrop-blur-sm',
+        'rounded-[12px] border bg-ink-2 p-4',
         accent ? 'border-lime/40' : 'border-ink-3'
       )}
     >
-      <div className="flex items-center gap-2 text-paper-mute">
-        {icon}
-        <p className="smallcaps">{label}</p>
-      </div>
+      <p className="text-xs text-paper-mute">{label}</p>
       <p
         className={cn(
-          'mt-2 font-display text-3xl leading-none tabular-nums sm:text-4xl',
+          'mt-1 text-3xl font-bold tabular-nums',
           accent ? 'text-lime' : 'text-paper'
         )}
       >
         {typeof value === 'number' ? value.toLocaleString() : value}
       </p>
-      {hint && <p className="mt-1 font-mono text-[10px] text-paper-mute">{hint}</p>}
+      {hint && <p className="mt-0.5 font-mono text-[10px] text-paper-mute">{hint}</p>}
     </div>
   )
 }
@@ -751,7 +708,7 @@ function Empty({
         type="button"
         onClick={onRun}
         disabled={running}
-        className="smallcaps glow-violet pill mt-6 h-12 bg-lime px-7 text-base font-bold text-lime-ink hover:bg-lime/90"
+        className="pill mt-6 h-11 bg-lime px-6 text-sm font-bold text-lime-ink hover:bg-lime/90"
       >
         {running ? (
           <>
@@ -893,10 +850,10 @@ function CandidateDrawer({
           type="button"
           onClick={onToggleShortlist}
           className={cn(
-            'smallcaps pill h-11 w-full text-sm font-bold',
+            'pill h-11 w-full text-sm font-bold',
             c.is_shortlisted
               ? 'border border-lime/40 bg-ink-2 text-lime hover:bg-ink-3'
-              : 'glow-violet bg-lime text-lime-ink hover:bg-lime/90'
+              : 'bg-lime text-lime-ink hover:bg-lime/90'
           )}
         >
           {c.is_shortlisted ? (
