@@ -56,6 +56,7 @@ export type DiscoverCandidate = {
 
   discovered_via: string
   discovery_seed: string | null
+  data_source: string | null
 
   score_fit: number | null
   score_engagement: number | null

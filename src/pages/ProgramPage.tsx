@@ -775,6 +775,14 @@ function CandidateDrawer({
         </a>
         <div className="flex flex-wrap gap-2 pt-1">
           <GeoChip country={c.country_guess} timezone={c.timezone_bucket} />
+          {c.data_source?.startsWith('ig_verified') && (
+            <span
+              className="inline-flex items-center gap-1 rounded-[6px] border border-lime/40 bg-lime/5 px-2 py-0.5 text-[10px] uppercase tracking-caps text-lime"
+              title={`Profile fetched live from Instagram (${c.data_source.split(':')[1] ?? 'verified'})`}
+            >
+              IG verified
+            </span>
+          )}
           {c.is_outlier_flagged && (
             <span className="inline-flex items-center gap-1 rounded-[6px] border border-lime/40 px-2 py-0.5 text-[10px] uppercase tracking-caps text-lime">
               <Star className="size-2.5" fill="currentColor" />
